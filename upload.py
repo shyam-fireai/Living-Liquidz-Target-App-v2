@@ -16,7 +16,38 @@ REQUIRED_COLUMNS = TABLE_SCHEMAS
 # -------------------------------
 # DYNAMIC DAILY TARGET GENERATOR
 # -------------------------------
-def generate_daily_targets_from_monthly(df_monthly):
+def robust_read_csv(uploaded_file):
+    """
+    Robust CSV reader that handles:
+    - Multiple encodings (utf-8, utf-8-sig, cp1252, latin1, iso-8859-1)
+    - Non-breaking spaces (\xa0) and rogue characters
+    - Variable delimiters (comma, semicolon, tab)
+    - Inconsistent line terminators
+    """
+    raw_bytes = uploaded_file.getvalue() if hasattr(uploaded_file, "getvalue") else uploaded_file.read()
+    
+    # Common encodings encountered in Excel exports and CSVs
+    encodings = ["utf-8-sig", "utf-8", "cp1252", "latin1", "iso-8859-1"]
+    
+    last_err = None
+    for enc in encodings:
+        try:
+            text = raw_bytes.decode(enc)
+            # Replace non-breaking spaces (\xa0) and unicode spaces with standard space
+            text = text.replace('\xa0', ' ')
+            
+            # Read via StringIO using Python engine with sep=None to sniff delimiter
+            return pd.read_csv(io.StringIO(text), sep=None, engine='python')
+        except Exception as e:
+            last_err = e
+            continue
+            
+    # Fallback with replacement of un-decodable bytes
+    try:
+        text = raw_bytes.decode('utf-8', errors='replace').replace('\xa0', ' ')
+        return pd.read_csv(io.StringIO(text), sep=None, engine='python')
+    except Exception:
+        raise last_err if last_err else Exception("Unable to parse CSV file.")
     """
     Distributes monthly target values across days of the month dynamically:
       - Weekdays (Mon - Thu): Weight 3.0
@@ -149,8 +180,8 @@ def upload_screen(selected_table):
         logger.info(f"File uploaded: {uploaded_file.name} for table: {selected_table}")
 
         try:
-            df = pd.read_csv(uploaded_file)
-            df.columns = [c.strip().lower() for c in df.columns]
+            df = robust_read_csv(uploaded_file)
+            df.columns = [str(c).strip().replace('\xa0', ' ').lower() for c in df.columns]
 
             required_cols = REQUIRED_COLUMNS[selected_table]
 
