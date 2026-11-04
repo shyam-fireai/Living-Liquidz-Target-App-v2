@@ -48,6 +48,12 @@ def robust_read_csv(uploaded_file):
         return pd.read_csv(io.StringIO(text), sep=None, engine='python')
     except Exception:
         raise last_err if last_err else Exception("Unable to parse CSV file.")
+
+
+# -------------------------------
+# DYNAMIC DAILY TARGET GENERATOR
+# -------------------------------
+def generate_daily_targets_from_monthly(df_monthly):
     """
     Distributes monthly target values across days of the month dynamically:
       - Weekdays (Mon - Thu): Weight 3.0
