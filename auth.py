@@ -1,9 +1,6 @@
-import base64
 import datetime
-import hashlib
 import json
 import logging
-import os
 import time
 import urllib.parse
 
@@ -11,43 +8,23 @@ import extra_streamlit_components as stx
 import requests
 import streamlit as st
 
-# Logging setup
-logging.basicConfig(level=logging.INFO)
+from config import get_secret
+from services.session import SESSION_SECONDS, create_token, token_expiry, verify_token
+
 logger = logging.getLogger(__name__)
 
-# Fallback Cookie Secret since user stated they don't have one right now
-COOKIE_SECRET = "fallback_temporary_dev_secret_key"
+AUTH_COOKIES = ("auth_token", "auth_user", "auth_profile", "auth_session_active", "auth_logout_in_progress")
 
 
 # AuthService class (backend)
 class AuthService:
     def __init__(self):
-        # Load from secrets.json as requested, fallback to environment variables
-        logger.info("Initializing AuthService...")
-        try:
-            with open("secrets.json") as f:
-                creds = json.load(f)
-            self.base_url = creds.get("FIREAI_BASE_URL", os.getenv("FIREAI_BASE_URL"))
-            self.api_key = creds.get("FIREAI_API_KEY", os.getenv("FIREAI_API_KEY"))
-            raw_allowed = os.getenv("ALLOWED_EMAILS") or creds.get("ALLOWED_EMAILS", [])
-            if isinstance(raw_allowed, list):
-                self.allowed_emails = [e.strip().lower() for e in raw_allowed if e.strip()]
-            elif isinstance(raw_allowed, str):
-                self.allowed_emails = [e.strip().lower() for e in raw_allowed.split(",") if e.strip()]
-            else:
-                self.allowed_emails = []
-            logger.info(f"AuthService initialized with Base URL: {self.base_url}")
-        except Exception as e:
-            logger.error(f"Failed to load secrets for AuthService: {e}")
-            self.base_url = os.getenv("FIREAI_BASE_URL")
-            self.api_key = os.getenv("FIREAI_API_KEY")
-            raw_allowed = os.getenv("ALLOWED_EMAILS", "")
-            if isinstance(raw_allowed, list):
-                self.allowed_emails = [e.strip().lower() for e in raw_allowed if e.strip()]
-            elif isinstance(raw_allowed, str):
-                self.allowed_emails = [e.strip().lower() for e in raw_allowed.split(",") if e.strip()]
-            else:
-                self.allowed_emails = []
+        self.base_url = get_secret("FIREAI_BASE_URL")
+        self.api_key = get_secret("FIREAI_API_KEY")
+        raw_allowed = get_secret("ALLOWED_EMAILS", [])
+        if isinstance(raw_allowed, str):
+            raw_allowed = raw_allowed.split(",")
+        self.allowed_emails = [e.strip().lower() for e in raw_allowed if e.strip()]
 
     def login(self, email, password):
         # Restrict to allowed emails (loaded from ENV/secrets)
@@ -89,20 +66,9 @@ auth_service = AuthService()
 
 
 def log_to_audit(action_type, message=None, user_email=None):
-    """Bridge to the audit logger in db.py"""
-    try:
-        from db import log_audit_action
+    from db.audit import log_audit_action  # lazy: keeps the login page fast and import-safe
 
-        log_audit_action(action_type=action_type, error_message=message, user_email=user_email)
-    except Exception as e:
-        logger.error(f"Audit Log Failed: {e}")
-
-
-# Helper functions
-def _generate_session_token(username: str) -> str:
-    timestamp = str(int(time.time()))
-    data = f"{username}:{timestamp}:{COOKIE_SECRET}"
-    return base64.b64encode(hashlib.sha256(data.encode()).digest()).decode()[:32]
+    log_audit_action(action_type=action_type, error_message=message, user_email=user_email)
 
 
 def get_cookie_manager():
@@ -186,7 +152,8 @@ def show_login_page():
                 st.session_state.username = username_or_email
                 st.session_state.user_email = username_or_email
                 log_to_audit("LOGIN", user_email=username_or_email)
-                token = _generate_session_token(username_or_email)
+                expires_at = int(time.time()) + SESSION_SECONDS
+                token = create_token(username_or_email, expires_at)
 
                 user_data = response_data.get("user", {})
                 profile = {
@@ -199,6 +166,7 @@ def show_login_page():
                 }
                 # 4. Store in session state (Fast path access)
                 st.session_state.session_token = token
+                st.session_state.session_expires_at = expires_at
                 st.session_state.auth_profile = profile
 
                 # 4b. CLEAR the Hard Logout Lock (Unlock the door)
@@ -208,7 +176,7 @@ def show_login_page():
 
                 # 5. Set cookies (1-Hour Secure Persistence)
                 # This ensures the session handles Ctrl+R but stays secure
-                expiry = datetime.datetime.now() + datetime.timedelta(hours=1)
+                expiry = datetime.datetime.fromtimestamp(expires_at)
 
                 cookie_manager.set("auth_token", token, key="set_at", expires_at=expiry)
                 cookie_manager.set("auth_user", username_or_email, key="set_au", expires_at=expiry)
@@ -249,7 +217,7 @@ def require_login():
         )
 
         # Purge ALL auth cookies from the browser immediately
-        for cname in ["auth_token", "auth_user", "auth_profile", "auth_session_active", "auth_logout_in_progress"]:
+        for cname in AUTH_COOKIES:
             try:
                 cookie_manager.delete(cname, key=f"purge_{cname}")
             except KeyError:
@@ -309,8 +277,13 @@ def require_login():
     saved_token = urllib.parse.unquote(raw_token) if raw_token else None
     saved_user = urllib.parse.unquote(raw_user) if raw_user else None
 
+    if saved_token and saved_user and not verify_token(saved_user, saved_token):
+        logger.warning("Rejected invalid or expired session token for %s", saved_user)
+        saved_token = saved_user = None
+
     if saved_token and saved_user:
-        logger.info(f"Restoring 1-hour session instantly for: {saved_user}")
+        logger.info("Restoring session for %s", saved_user)
+        st.session_state.session_expires_at = token_expiry(saved_token)
         st.session_state.authenticated = True
         st.session_state.username = saved_user
         st.session_state.user_email = saved_user
@@ -325,11 +298,7 @@ def require_login():
                 pass
         return True
 
-    # 6. Fallback (If sentinel exists but data is missing)
-    show_login_page()
-    return False
-
-    # 5. Completely unauthenticated
+    # 6. Sentinel exists but token/user are missing or invalid
     show_login_page()
     return False
 
@@ -347,8 +316,3 @@ def logout(cookie_manager=None):
     # 2. Stage the server-side trigger
     st.session_state.logout_triggered = True
     st.rerun()
-
-
-# Main logic
-if __name__ == "__main__":
-    require_login()
