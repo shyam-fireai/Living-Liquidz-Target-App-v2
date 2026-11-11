@@ -73,3 +73,23 @@ def test_paging_uses_offset_parameter(client):
     df = db.fetch_data(MONTHLY, limit=200, offset=400)
     assert isinstance(df, pd.DataFrame)
     assert len(client.queries) == 1  # same page -> cached
+
+
+class TestPageWindow:
+    def test_first_page(self):
+        from views.dashboard import page_window
+
+        assert page_window(22_869, 200, 1) == (1, 115, 0)
+
+    def test_last_page_and_clamping(self):
+        from views.dashboard import page_window
+
+        assert page_window(22_869, 200, 115) == (115, 115, 22_800)
+        assert page_window(22_869, 200, 999) == (115, 115, 22_800)
+        assert page_window(22_869, 200, 0) == (1, 115, 0)
+
+    def test_exact_multiple_and_empty(self):
+        from views.dashboard import page_window
+
+        assert page_window(400, 200, 2) == (2, 2, 200)
+        assert page_window(0, 200, 3) == (1, 1, 0)

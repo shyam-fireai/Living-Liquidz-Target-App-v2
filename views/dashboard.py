@@ -1,4 +1,4 @@
-"""Dashboard: summary cards, filtered table with a visible row count, and CSV/Excel export."""
+"""Dashboard: summary cards, a paged table (paging done by ClickHouse), and CSV/Excel export."""
 
 import html
 import logging
@@ -112,6 +112,42 @@ def _filter_chips(cfg: TableConfig, filters: dict) -> None:
         st.rerun()
 
 
+def page_window(total_rows: int, page_size: int, page: int) -> tuple[int, int, int]:
+    """(page clamped to 1..pages, number of pages, row offset) for 1-based `page`."""
+    pages = max(1, -(-total_rows // page_size))
+    page = min(max(1, page), pages)
+    return page, pages, (page - 1) * page_size
+
+
+def _current_page(cfg: TableConfig, filters: dict, page_size: int) -> int:
+    """Page number for this table; back to page 1 whenever the filters or page size change."""
+    key = f"dash_page_{cfg.name}"
+    signature = repr((sorted((k, list(map(str, v))) for k, v in filters.items()), page_size))
+    if st.session_state.get(f"{key}_sig") != signature:
+        st.session_state[f"{key}_sig"] = signature
+        st.session_state[key] = 1
+    return st.session_state[key]
+
+
+def _set_page(cfg: TableConfig, page: int) -> None:
+    st.session_state[f"dash_page_{cfg.name}"] = page
+
+
+def _pager(cfg: TableConfig, page: int, pages: int) -> None:
+    if pages <= 1:
+        return
+    _, prev, label, nxt = st.columns([4, 1.1, 1.4, 1.1], vertical_alignment="center")
+    prev.button(
+        "◀ Previous", width="stretch", disabled=page <= 1, key="dash_prev", on_click=_set_page, args=(cfg, page - 1)
+    )
+    label.markdown(
+        f"<div style='text-align:center'>Page <b>{page:,}</b> of <b>{pages:,}</b></div>", unsafe_allow_html=True
+    )
+    nxt.button(
+        "Next ▶", width="stretch", disabled=page >= pages, key="dash_next", on_click=_set_page, args=(cfg, page + 1)
+    )
+
+
 def _downloads(cfg: TableConfig, filters: dict, total_rows: int) -> None:
     stamp = datetime.now().strftime("%Y%m%d_%H%M")
     base = f"{cfg.name}_{stamp}"
@@ -157,16 +193,18 @@ def dashboard_screen(cfg: TableConfig) -> None:
     _summary_cards(cfg, totals)
 
     show_label = st.session_state.get(f"dash_rows_{cfg.name}", "200")
-    limit = ROW_CHOICES[show_label]
+    page_size = ROW_CHOICES[show_label]
+    page, pages, offset = page_window(totals["rows"], page_size, _current_page(cfg, filters, page_size))
     with st.spinner(f"Loading {cfg.display_name}..."):
         try:
-            df = fetch_data(cfg.name, filters=filters or None, limit=limit)
+            df = fetch_data(cfg.name, filters=filters or None, limit=page_size, offset=offset)
         except Exception as e:
             show_error("Could not load rows from the database. Please try again in a moment.", e)
             return
 
     info, picker = st.columns([4, 1.4], vertical_alignment="bottom")
-    info.caption(f"Showing **{len(df):,}** of **{totals['rows']:,}** rows · newest first")
+    first, last = (offset + 1, offset + len(df)) if len(df) else (0, 0)
+    info.caption(f"Showing **{first:,}–{last:,}** of **{totals['rows']:,}** rows · newest first")
     picker.selectbox("Rows to show", list(ROW_CHOICES), key=f"dash_rows_{cfg.name}")
 
     df = df.drop(columns=list(SYSTEM_COLUMNS), errors="ignore")
@@ -177,4 +215,5 @@ def dashboard_screen(cfg: TableConfig) -> None:
     df.columns = [format_column(c) for c in df.columns]
     st.dataframe(df, width="stretch", hide_index=True)
 
+    _pager(cfg, page, pages)
     _downloads(cfg, filters, totals["rows"])
