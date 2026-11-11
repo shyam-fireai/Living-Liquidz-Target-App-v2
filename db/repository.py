@@ -68,10 +68,15 @@ def build_where(table: str, filters: dict | None) -> tuple[str, dict]:
 # -------------------------------
 @st.cache_data(ttl=60, show_spinner=False)
 def fetch_data(table: str, filters: dict | None = None, limit: int = DEFAULT_ROW_LIMIT) -> pd.DataFrame:
-    get_table(table)
+    cfg = get_table(table)
     where, params = build_where(table, filters)
     params["limit"] = int(limit)
-    query = f"SELECT * FROM {table} FINAL WHERE {where} LIMIT {{limit:UInt32}} SETTINGS max_execution_time=60"
+    # Deterministic order (newest period first) so "the first N rows" is always the same set.
+    order = ", ".join([f"{cfg.date_col} DESC", *[c for c in cfg.key_cols if c != cfg.date_col]])
+    query = (
+        f"SELECT * FROM {table} FINAL WHERE {where} ORDER BY {order} "
+        "LIMIT {limit:UInt32} SETTINGS max_execution_time=60"
+    )
     try:
         result = get_client().query(query, parameters=params)
         df = pd.DataFrame(result.result_rows, columns=result.column_names)

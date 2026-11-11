@@ -1,3 +1,5 @@
+"""Edit screen: inline editing with locked keys, a cell-level diff, validation, then save."""
+
 import logging
 
 import pandas as pd
@@ -5,14 +7,18 @@ import streamlit as st
 
 from config import BRANCH_MONTHLY, DATE_BRANCH, SYSTEM_COLUMNS, TableConfig
 from db.audit import log_audit_action
-from db.repository import fetch_data
+from db.repository import fetch_data, fetch_existing
+from services.edits import cell_changes, changed_rows_mask, check_edits
 from services.targets import save_targets
 from services.validation import clean_dataframe_for_db
-from ui.components import render_header
+from ui.components import render_header, show_error
 from ui.filters import render_sidebar_filters
-from ui.formatting import apply_currency_format, format_column
+from ui.formatting import apply_currency_format, format_column, format_indian_number
 
 logger = logging.getLogger(__name__)
+
+OLD_STYLE = "background-color: #FEE2E2; color: #991B1B"
+NEW_STYLE = "background-color: #DCFCE7; color: #166534; font-weight: 600"
 
 
 def _reset_edit_state(table: str) -> None:
@@ -21,20 +27,70 @@ def _reset_edit_state(table: str) -> None:
     st.session_state.setdefault("editor_version", 0)
 
 
-def _changed_mask(original: pd.DataFrame, edited: pd.DataFrame) -> pd.Series:
-    """Rows whose values differ, ignoring display formatting (rupee signs, commas, case)."""
-    norm_orig = clean_dataframe_for_db(original).astype(str).reset_index(drop=True)
-    norm_edit = clean_dataframe_for_db(edited).astype(str).reset_index(drop=True)
-    mask = (norm_orig.values != norm_edit.values).any(axis=1)
-    return pd.Series(mask, index=original.index)
+def _discard_changes() -> None:
+    st.session_state.edit_original_df = None
+    st.session_state.editor_version += 1
 
 
-def _replaced_keys(cfg: TableConfig, original_rows: pd.DataFrame, new_rows: pd.DataFrame) -> list[dict]:
-    """Old key values of rows whose key columns were edited."""
-    norm_old = clean_dataframe_for_db(original_rows[list(cfg.key_cols)]).astype(str)
-    norm_new = clean_dataframe_for_db(new_rows[list(cfg.key_cols)]).astype(str)
-    changed = (norm_old != norm_new).any(axis=1)
-    return original_rows.loc[changed, list(cfg.key_cols)].to_dict(orient="records")
+def _show_flash() -> None:
+    flash = st.session_state.pop("edit_flash", None)
+    if not flash:
+        return
+    if flash["ok"]:
+        st.toast(flash["message"], icon="✅")
+    else:
+        st.warning(f"⚠️ {flash['message']}")
+
+
+def _diff_table(cfg: TableConfig, diff: pd.DataFrame):
+    def fmt(col, value):
+        if col in cfg.value_cols:
+            return format_indian_number(value, show_rupee=cfg.currency and "value" in col)
+        return str(value)
+
+    view = pd.DataFrame(
+        {
+            "Row": diff["Row"],
+            "Column": diff["column"].map(format_column),
+            "Old": [fmt(c, v) for c, v in zip(diff["column"], diff["Old"], strict=True)],
+            "New": [fmt(c, v) for c, v in zip(diff["column"], diff["New"], strict=True)],
+        }
+    )
+    return view.style.map(lambda _: OLD_STYLE, subset=["Old"]).map(lambda _: NEW_STYLE, subset=["New"])
+
+
+def _save(cfg: TableConfig, check, original_rows: pd.DataFrame, n_cells: int) -> None:
+    table = cfg.name
+    with st.spinner("Saving..."):
+        report = save_targets(table, check.rows[list(cfg.columns)], replaced_keys=check.replaced_keys)
+
+    if report.nothing_saved:
+        log_audit_action("ERROR", target_table=table, error_message=report.message)
+        st.error(f"❌ {report.message}")
+        return
+
+    log_audit_action(
+        "EDIT",
+        target_table=table,
+        record_count=report.saved_rows,
+        # clean values (numbers, not "₹1,00,000.00") so the audit log is queryable
+        before_state=clean_dataframe_for_db(original_rows[list(cfg.columns)]).to_dict(orient="records"),
+        after_state=check.rows[list(cfg.columns)].to_dict(orient="records"),
+        metadata={"changed_cells": n_cells, "key_changes": len(check.replaced_keys)},
+        error_message="; ".join(report.errors) or None,
+    )
+    if report.daily_rows:
+        log_audit_action(
+            "EDIT",
+            target_table=DATE_BRANCH,
+            record_count=report.daily_rows,
+            metadata={"source": f"{BRANCH_MONTHLY}_edit_sync"},
+        )
+
+    st.session_state.edit_flash = {"ok": report.ok, "message": report.message}
+    _discard_changes()
+    st.cache_data.clear()
+    st.rerun()
 
 
 def edit_screen(cfg: TableConfig) -> None:
@@ -47,10 +103,7 @@ def edit_screen(cfg: TableConfig) -> None:
         if st.button("⬅️ Back", width="stretch"):
             st.session_state.page = "dashboard"
             st.rerun()
-
-    flash = st.session_state.pop("edit_flash", None)
-    if flash:
-        (st.success if flash["ok"] else st.warning)(flash["message"])
+    _show_flash()
 
     filters, changed = render_sidebar_filters(cfg, prefix="ed")
     if changed:
@@ -58,9 +111,8 @@ def edit_screen(cfg: TableConfig) -> None:
 
     with st.spinner("Loading records..."):
         df = fetch_data(table, filters=filters or None)
-
     if df.empty:
-        st.warning("No data available")
+        st.info("No rows match the selected filters." if filters else "No data available.")
         return
 
     display_df = apply_currency_format(df.drop(columns=list(SYSTEM_COLUMNS), errors="ignore"))
@@ -69,72 +121,69 @@ def edit_screen(cfg: TableConfig) -> None:
         st.session_state.edit_original_df = display_df.copy()
     original_df = st.session_state.edit_original_df
 
-    hint = "\U0001f4a1 **To save data**, first edit any cell in the table below."
-    st.info(("ℹ️ **Showing first 200 records.** Use filters to narrow down. | " if not filters else "") + hint)
+    keys_label = ", ".join(format_column(c) for c in cfg.key_cols)
+    unlock = st.toggle(
+        f"\U0001f513 Allow editing key columns ({keys_label})",
+        value=False,
+        key=f"edit_unlock_keys_{table}",
+        help="Keys identify a row. Changing one moves the target to a different month/branch/series.",
+    )
+    if unlock:
+        st.warning(
+            "⚠️ Key columns are editable. Changing a key retires the old row"
+            + (" and its daily targets" if table == BRANCH_MONTHLY else "")
+            + " and creates a new one."
+        )
+    tip = "\U0001f4a1 Edit cells in the table, review the changes below, then save."
+    st.caption(("Showing the first 200 rows; use the filters to narrow down. " if not filters else "") + tip)
 
     edited_df = st.data_editor(
         display_df,
         width="stretch",
         num_rows="fixed",
+        disabled=[] if unlock else list(cfg.key_cols),
         column_config={c: st.column_config.Column(label=format_column(c)) for c in display_df.columns},
-        hide_index=False,
+        hide_index=True,
         key=f"editor_{table}_{st.session_state.editor_version}",
     )
     edited_df.index = original_df.index
     edited_df.columns = original_df.columns
 
-    changed_mask = _changed_mask(original_df, edited_df)
-    if not changed_mask.any():
+    mask = changed_rows_mask(cfg, original_df, edited_df)
+    if not mask.any():
         return
 
-    rows_to_update = edited_df[changed_mask]
-    original_rows = original_df[changed_mask]
+    original_rows, edited_rows = original_df[mask], edited_df[mask]
+    diff = cell_changes(cfg, original_rows, edited_rows)
 
-    st.warning("⚠️ Pending Changes Detected. Review summary below to Save.")
     st.divider()
-    st.subheader("\U0001f50d Changes Summary")
-    st.markdown("### \U0001f7e5 Before")
-    st.dataframe(original_rows.rename(columns=format_column), width="stretch")
-    st.markdown("### \U0001f7e9 After")
-    st.dataframe(rows_to_update.rename(columns=format_column), width="stretch")
-    st.info("\U0001f449 Review your changes above and click Final Save below.")
+    st.subheader(f"\U0001f50d Review {len(diff)} change(s) in {int(mask.sum())} row(s)")
+    st.dataframe(_diff_table(cfg, diff), width="stretch", hide_index=True)
 
-    if not st.button("\U0001f4be Final Save", width="stretch", type="primary"):
-        return
-
-    try:
-        replaced = _replaced_keys(cfg, original_rows, rows_to_update)
-        with st.spinner("Saving..."):
-            report = save_targets(table, rows_to_update, replaced_keys=replaced)
-
-        if report.nothing_saved:
-            log_audit_action("ERROR", target_table=table, error_message=report.message)
-            st.error(report.message)
+    check = check_edits(cfg, original_rows, edited_rows)
+    if check.ok and check.replaced_keys:
+        try:
+            check = check_edits(cfg, original_rows, edited_rows, fetch_existing(table, check.rows))
+        except Exception as e:
+            show_error("Could not check the new keys against the database. Please try again.", e)
             return
+    if not check.ok:
+        st.error(f"❌ **{len(check.problems)} problem(s) must be fixed before saving:**")
+        st.dataframe(pd.DataFrame(check.problems), width="stretch", hide_index=True)
 
-        log_audit_action(
-            "EDIT",
-            target_table=table,
-            record_count=report.saved_rows,
-            # stored as clean values (numbers, not "₹1,00,000.00") so the audit log is queryable
-            before_state=clean_dataframe_for_db(original_rows).to_dict(orient="records"),
-            after_state=clean_dataframe_for_db(rows_to_update).to_dict(orient="records"),
-            error_message="; ".join(report.errors) or None,
+    col_save, col_discard, _ = st.columns([2, 1.2, 3])
+    with col_discard:
+        if st.button("↩️ Discard changes", width="stretch"):
+            _discard_changes()
+            st.rerun()
+    with col_save:
+        clicked = st.button(
+            f"\U0001f4be Save {len(diff)} change(s)", type="primary", width="stretch", disabled=not check.ok
         )
-        if report.daily_rows:
-            log_audit_action(
-                "EDIT",
-                target_table=DATE_BRANCH,
-                record_count=report.daily_rows,
-                metadata={"source": f"{BRANCH_MONTHLY}_edit_sync"},
-            )
-
-        st.session_state.edit_flash = {"ok": report.ok, "message": f"✅ {report.message}"}
-        st.session_state.edit_original_df = None
-        st.session_state.editor_version += 1
-        st.cache_data.clear()
-        st.rerun()
-    except Exception as e:
-        logger.exception("Edit save failed for %s", table)
-        log_audit_action("ERROR", target_table=table, error_message=f"Edit UI Crash: {e}")
-        st.error(f"❌ Error: {e}")
+    if clicked:
+        try:
+            _save(cfg, check, original_rows, len(diff))
+        except Exception as e:
+            logger.exception("Edit save failed for %s", table)
+            log_audit_action("ERROR", target_table=table, error_message=f"Edit save failed: {e}")
+            show_error("Saving failed. Please reload the rows and check whether your change was applied.", e)
