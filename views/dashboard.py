@@ -22,7 +22,7 @@ from ui.formatting import (
 
 logger = logging.getLogger(__name__)
 
-ROW_CHOICES = {"200": 200, "1,000": 1_000, "5,000": 5_000, "All": MAX_EXPORT_ROWS}
+ROW_CHOICES = {"200": 200, "500": 500, "1,000": 1_000, "5,000": 5_000, "All": MAX_EXPORT_ROWS}
 
 
 def _header(cfg: TableConfig) -> None:
@@ -77,7 +77,7 @@ def _kpi_cards_html(cards: list[tuple[str, str, str | None]]) -> str:
 
 
 def _summary_cards(cfg: TableConfig, totals: dict) -> None:
-    """Rows, branches, and Target/Incentive 1 totals; other non-zero levels as a caption."""
+    """Rows, branches, and Target/Incentive 1 totals (other levels are not summarised)."""
     first_target = cfg.value_cols[0]  # target_value1 / target_qty1
     money = cfg.currency
     # (label, short value, exact value for the tooltip)
@@ -99,14 +99,6 @@ def _summary_cards(cfg: TableConfig, totals: dict) -> None:
             )
         )
     st.markdown(_kpi_cards_html(cards), unsafe_allow_html=True)
-
-    extra = [
-        f"{format_column(c)} {format_indian_number(totals[c], show_rupee=money or 'incentive' in c)}"
-        for c in cfg.value_cols[2:]
-        if totals.get(c)
-    ]
-    if extra:
-        st.caption("Other totals: " + " · ".join(extra))
 
 
 def _filter_chips(cfg: TableConfig, filters: dict) -> None:
