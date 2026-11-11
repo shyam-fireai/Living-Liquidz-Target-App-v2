@@ -66,25 +66,54 @@ def build_where(table: str, filters: dict | None) -> tuple[str, dict]:
 # -------------------------------
 # READS
 # -------------------------------
+def _order_by(table: str) -> str:
+    """Deterministic order (newest period first) so "the first N rows" is always the same set."""
+    cfg = get_table(table)
+    return ", ".join([f"{cfg.date_col} DESC", *[c for c in cfg.key_cols if c != cfg.date_col]])
+
+
 @st.cache_data(ttl=60, show_spinner=False)
 def fetch_data(table: str, filters: dict | None = None, limit: int = DEFAULT_ROW_LIMIT) -> pd.DataFrame:
-    cfg = get_table(table)
+    """Rows for display. Raises on database errors (callers show a friendly message)."""
+    get_table(table)
     where, params = build_where(table, filters)
     params["limit"] = int(limit)
-    # Deterministic order (newest period first) so "the first N rows" is always the same set.
-    order = ", ".join([f"{cfg.date_col} DESC", *[c for c in cfg.key_cols if c != cfg.date_col]])
     query = (
-        f"SELECT * FROM {table} FINAL WHERE {where} ORDER BY {order} "
+        f"SELECT * FROM {table} FINAL WHERE {where} ORDER BY {_order_by(table)} "
         "LIMIT {limit:UInt32} SETTINGS max_execution_time=60"
     )
-    try:
-        result = get_client().query(query, parameters=params)
-        df = pd.DataFrame(result.result_rows, columns=result.column_names)
-        logger.info("Fetched %d rows from %s", len(df), table)
-        return df
-    except Exception:
-        logger.exception("Error fetching data from %s", table)
-        return pd.DataFrame()
+    result = get_client().query(query, parameters=params)
+    df = pd.DataFrame(result.result_rows, columns=result.column_names)
+    logger.info("Fetched %d rows from %s", len(df), table)
+    return df
+
+
+MAX_EXPORT_ROWS = 200_000
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def summarize(table: str, filters: dict | None = None) -> dict:
+    """Totals over *all* rows matching the filters (not just the rows on screen)."""
+    cfg = get_table(table)
+    where, params = build_where(table, filters)
+    sums = ", ".join(f"sum({c}) AS {c}" for c in cfg.value_cols)
+    query = f"SELECT count() AS rows, uniqExact(branch_name) AS branches, {sums} FROM {table} FINAL WHERE {where}"
+    result = get_client().query(query, parameters=params)
+    row = dict(zip(result.column_names, result.result_rows[0], strict=True))
+    return {k: (float(v) if k in cfg.value_cols else int(v)) for k, v in row.items()}
+
+
+def fetch_for_export(table: str, filters: dict | None = None) -> pd.DataFrame:
+    """All matching rows (up to MAX_EXPORT_ROWS), uncached, raising on failure."""
+    cfg = get_table(table)
+    where, params = build_where(table, filters)
+    params["limit"] = MAX_EXPORT_ROWS
+    query = (
+        f"SELECT {', '.join(cfg.columns)} FROM {table} FINAL WHERE {where} "
+        f"ORDER BY {_order_by(table)} LIMIT {{limit:UInt32}}"
+    )
+    result = get_client().query(query, parameters=params)
+    return pd.DataFrame(result.result_rows, columns=result.column_names)
 
 
 def fetch_existing(table: str, rows: pd.DataFrame) -> pd.DataFrame:

@@ -90,3 +90,27 @@ def show_error(message: str, exc: BaseException | None = None) -> None:
         logger.error("%s: %r", message, exc)
         with st.expander("Technical details"):
             st.code(f"{type(exc).__name__}: {exc}")
+
+
+def render_user_card() -> None:
+    """Sidebar card: who is logged in, when the session ends, and a logout button."""
+    from datetime import datetime
+
+    from auth import get_cookie_manager, logout
+    from config import DISPLAY_TZ
+
+    profile = st.session_state.get("auth_profile") or {}
+    email = st.session_state.get("user_email", "")
+    name = f"{profile.get('first_name') or ''} {profile.get('last_name') or ''}".strip() or email
+
+    st.sidebar.divider()
+    with st.sidebar.container(border=True):
+        st.markdown(f"\U0001f464 **{name}**")
+        if email and email != name:
+            st.caption(email)
+        expires_at = st.session_state.get("session_expires_at")
+        if expires_at:
+            ends = datetime.fromtimestamp(int(expires_at), tz=DISPLAY_TZ)
+            st.caption(f"⏱️ Session ends at {ends:%H:%M} {ends.tzname()}")
+        if st.button("\U0001f6aa Logout", width="stretch", key="sidebar_logout"):
+            logout(get_cookie_manager())

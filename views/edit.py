@@ -110,7 +110,11 @@ def edit_screen(cfg: TableConfig) -> None:
         st.session_state.edit_original_df = None  # new baseline for the new selection
 
     with st.spinner("Loading records..."):
-        df = fetch_data(table, filters=filters or None)
+        try:
+            df = fetch_data(table, filters=filters or None)
+        except Exception as e:
+            show_error("Could not load rows from the database. Please try again in a moment.", e)
+            return
     if df.empty:
         st.info("No rows match the selected filters." if filters else "No data available.")
         return

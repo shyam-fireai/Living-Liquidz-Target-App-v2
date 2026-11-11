@@ -9,7 +9,9 @@ from config import TABLES, validate_settings
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-st.set_page_config(page_title="Living Liquid Dashboard", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(
+    page_title="Living Liquid Dashboard", layout="wide", initial_sidebar_state="auto"
+)  # auto: open on desktop, collapsed on phones
 
 # Fail fast with a clear message if the deployment is missing configuration.
 _problems = validate_settings()
@@ -66,3 +68,8 @@ else:
     from views.dashboard import dashboard_screen
 
     dashboard_screen(cfg)
+
+# Rendered last so it sits at the bottom of the sidebar, below the filters.
+from ui.components import render_user_card  # noqa: E402
+
+render_user_card()

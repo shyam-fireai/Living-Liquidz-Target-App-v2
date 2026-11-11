@@ -17,6 +17,35 @@ def _active(selections: dict) -> dict:
     return {k: v for k, v in selections.items() if v}
 
 
+def clear_filters(cfg: TableConfig, prefix: str) -> None:
+    """Empty every filter (new widget keys so the browser drops its copies too). Caller reruns."""
+    state_key = f"{prefix}_filters"
+    version = st.session_state.get(f"{state_key}_version", 0)
+    st.session_state[state_key] = {}
+    for col in cfg.filter_cols:
+        st.session_state.pop(_widget_key(prefix, cfg.name, col, version), None)
+    st.session_state[f"{state_key}_version"] = version + 1
+
+
+def describe_filters(cfg: TableConfig, filters: dict, max_values: int = 3) -> list[str]:
+    """Short human labels for the active filters, e.g. 'Branch Name: A, B +2 more'."""
+    labels = []
+    for col in cfg.filter_cols:
+        values = filters.get(col)
+        if not values:
+            continue
+        if col == "date":
+            values = list(values)
+            text = f"{values[0]} → {values[-1]}" if len(values) > 1 else str(values[0])
+        else:
+            shown = [v.strftime("%b %Y") if col == "month" and hasattr(v, "strftime") else str(v) for v in values]
+            text = ", ".join(shown[:max_values]) + (
+                f" +{len(shown) - max_values} more" if len(shown) > max_values else ""
+            )
+        labels.append(f"{format_column(col)}: {text}")
+    return labels
+
+
 def render_sidebar_filters(cfg: TableConfig, prefix: str) -> tuple[dict, bool]:
     """Render one widget per filter column. Returns (active filters, whether they changed this run)."""
     table = cfg.name
@@ -55,10 +84,7 @@ def render_sidebar_filters(cfg: TableConfig, prefix: str) -> tuple[dict, bool]:
             )
 
     if st.sidebar.button("\U0001f504 Reset Filters", width="stretch", key=f"{prefix}_reset_filters"):
-        st.session_state[state_key] = {}
-        for col in cfg.filter_cols:
-            st.session_state.pop(_widget_key(prefix, table, col, version), None)
-        st.session_state[f"{state_key}_version"] = version + 1
+        clear_filters(cfg, prefix)
         st.rerun()
 
     active = _active(selections)

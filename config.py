@@ -6,6 +6,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass
+from datetime import timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
 
@@ -18,6 +19,9 @@ SECRETS_PATH = Path(os.getenv("LL_SECRETS_PATH", PROJECT_DIR / "secrets.json"))
 SYSTEM_COLUMNS = ("version", "updated_at", "is_active")
 STRING_COLUMNS = ("branch_name", "series_group", "item_code", "item_name", "pack_name", "series")
 DEFAULT_ROW_LIMIT = 200
+# Times shown to users (session expiry, history). India has no DST, so a fixed offset is exact and
+# avoids depending on the OS timezone database (absent on Windows and slim Docker images).
+DISPLAY_TZ = timezone(timedelta(hours=5, minutes=30), "IST")
 
 
 @dataclass(frozen=True)

@@ -72,3 +72,22 @@ class TestRemoveZeroColumns:
     def test_only_protected_columns(self):
         df = pd.DataFrame({"branch_name": ["A"]})
         assert list(fmt.remove_zero_columns(df).columns) == ["branch_name"]
+
+
+class TestFormatIndianCompact:
+    @pytest.mark.parametrize(
+        "value, expected",
+        [
+            (6344922729.1, "₹634.49 Cr"),
+            (123456789012, "₹12,345.68 Cr"),
+            (250000, "₹2.50 L"),
+            (99999, "₹99,999.00"),
+            (0, "₹0.00"),
+            (-15000000, "₹-1.50 Cr"),
+        ],
+    )
+    def test_values(self, value, expected):
+        assert fmt.format_indian_compact(value) == expected
+
+    def test_without_rupee(self):
+        assert fmt.format_indian_compact(5_000_000, show_rupee=False) == "50.00 L"

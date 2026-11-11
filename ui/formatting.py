@@ -51,3 +51,16 @@ def remove_zero_columns(df: pd.DataFrame) -> pd.DataFrame:
     num_df = df[other_cols].apply(pd.to_numeric, errors="coerce").fillna(0)
     non_zero = set(num_df.columns[(num_df != 0).any()])
     return df[[c for c in df.columns if c in PROTECTED_COLUMNS or c in non_zero]]
+
+
+def format_indian_compact(x, show_rupee: bool = True) -> str:
+    """Short form for summary cards: 6344922729.1 -> '₹634.49 Cr', 250000 -> '₹2.50 L'."""
+    value = float(x or 0)
+    prefix = RUPEE if show_rupee else ""
+    sign = "-" if value < 0 else ""
+    value = abs(value)
+    if value >= 1e7:
+        return f"{prefix}{sign}{format_indian_number(value / 1e7, show_rupee=False)} Cr"
+    if value >= 1e5:
+        return f"{prefix}{sign}{value / 1e5:.2f} L"
+    return f"{prefix}{sign}{format_indian_number(value, show_rupee=False)}"

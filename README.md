@@ -7,6 +7,18 @@ Internal Streamlit app for viewing, uploading and editing sales targets stored i
 - **Brand Wise Monthly Target**: monthly quantity targets per branch, series and item.
 - **Date & Branch Wise Target**: daily targets. Read-only in the UI; generated from the monthly table.
 
+What users can do:
+
+- **Dashboard**: summary cards (rows, branches, totals over *all* matching rows), cascading
+  filters with removable chips, "Showing N of M rows" with a row-count picker, and CSV/Excel
+  export of every matching row (the CSV can be edited and uploaded again).
+- **Upload** (CSV): every row is validated at once (missing values, bad dates, month not the 1st,
+  non-numeric/negative/too-large numbers, duplicate keys, unknown branches as warnings), then a
+  preview shows new / updated / unchanged rows and the daily split before anything is saved.
+  Only rows that change are written.
+- **Edit**: inline editing with key columns locked by default, a highlighted old -> new review,
+  the same validation as uploads, and protection against overwriting another row's key.
+
 Users log in with their FireAI account; only e-mails in `ALLOWED_EMAILS` are admitted. Every login,
 upload, edit and error is written to the `target_system_audit_logs` table.
 
