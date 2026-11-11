@@ -125,19 +125,6 @@ def edit_screen(cfg: TableConfig) -> None:
         st.session_state.edit_original_df = display_df.copy()
     original_df = st.session_state.edit_original_df
 
-    keys_label = ", ".join(format_column(c) for c in cfg.key_cols)
-    unlock = st.toggle(
-        f"\U0001f513 Allow editing key columns ({keys_label})",
-        value=False,
-        key=f"edit_unlock_keys_{table}",
-        help="Keys identify a row. Changing one moves the target to a different month/branch/series.",
-    )
-    if unlock:
-        st.warning(
-            "⚠️ Key columns are editable. Changing a key retires the old row"
-            + (" and its daily targets" if table == BRANCH_MONTHLY else "")
-            + " and creates a new one."
-        )
     tip = "\U0001f4a1 Edit cells in the table, review the changes below, then save."
     st.caption(("Showing the first 200 rows; use the filters to narrow down. " if not filters else "") + tip)
 
@@ -145,7 +132,6 @@ def edit_screen(cfg: TableConfig) -> None:
         display_df,
         width="stretch",
         num_rows="fixed",
-        disabled=[] if unlock else list(cfg.key_cols),
         column_config={c: st.column_config.Column(label=format_column(c)) for c in display_df.columns},
         hide_index=True,
         key=f"editor_{table}_{st.session_state.editor_version}",
@@ -171,6 +157,13 @@ def edit_screen(cfg: TableConfig) -> None:
         except Exception as e:
             show_error("Could not check the new keys against the database. Please try again.", e)
             return
+    if check.ok and check.replaced_keys:
+        keys_label = " / ".join(format_column(c) for c in cfg.key_cols)
+        st.warning(
+            f"⚠️ {len(check.replaced_keys)} row(s) have a changed key ({keys_label}). On save the old row"
+            + (" and its daily targets" if table == BRANCH_MONTHLY else "")
+            + " will be replaced by the new one."
+        )
     if not check.ok:
         st.error(f"❌ **{len(check.problems)} problem(s) must be fixed before saving:**")
         st.dataframe(pd.DataFrame(check.problems), width="stretch", hide_index=True)

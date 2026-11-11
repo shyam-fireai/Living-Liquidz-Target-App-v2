@@ -38,14 +38,15 @@ def _format_help(cfg: TableConfig) -> None:
         if cfg.date_col == "month"
         else "`date` must be a valid date, e.g. `2026-04-17` (or `17-04-2026`)."
     )
-    with st.expander("ℹ️ File format", expanded=False):
-        st.markdown(
-            f"- Columns: `{'`, `'.join(cfg.columns)}`\n"
-            f"- {date_rule}\n"
-            "- Text values are saved in UPPER CASE; blank numbers are saved as 0.\n"
-            "- Numbers may contain ₹ and commas. Negative numbers are not allowed.\n"
-            "- Each key (" + " + ".join(format_column(c) for c in cfg.key_cols) + ") may appear only once."
-        )
+    # Always visible (not collapsible) so users see the rules every time they upload.
+    st.info(
+        "**ℹ️ File format**\n\n"
+        f"- Columns: `{'`, `'.join(cfg.columns)}`\n"
+        f"- {date_rule}\n"
+        "- Text values are saved in UPPER CASE; blank numbers are saved as 0.\n"
+        "- Numbers may contain ₹ and commas. Negative numbers are not allowed.\n"
+        "- Each key (" + " + ".join(format_column(c) for c in cfg.key_cols) + ") may appear only once."
+    )
     st.download_button(
         "\U0001f4e5 Download Sample CSV",
         pd.DataFrame(columns=list(cfg.columns)).to_csv(index=False),

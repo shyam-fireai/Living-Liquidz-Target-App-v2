@@ -11,15 +11,12 @@ def render_header(title="Dashboard", hide_upload=False):
     """Renders a single-row sticky toolbar at absolute zero-gap top."""
     logger.debug("Rendering header toolbar for: %s", title)
 
+    # User details and Logout live in the sidebar user card (render_user_card), not in the header.
     if hide_upload:
-        # Pushes single action col to far right next to profile
-        col_brand, col_spacer, col_edit, col_profile = st.columns([3, 5, 1.4, 0.6], vertical_alignment="center")
+        col_brand, _, col_edit = st.columns([3, 5.6, 1.4], vertical_alignment="center")
         col_upload = None
     else:
-        # Grid layout for the toolbar, slightly larger action cols to avoid text wrapping
-        col_brand, col_spacer, col_edit, col_upload, col_profile = st.columns(
-            [3, 3.6, 1.4, 1.4, 0.6], vertical_alignment="center"
-        )
+        col_brand, _, col_edit, col_upload = st.columns([3, 4.2, 1.4, 1.4], vertical_alignment="center")
 
     with col_brand:
         st.markdown(
@@ -58,27 +55,6 @@ def render_header(title="Dashboard", hide_upload=False):
         """,
             unsafe_allow_html=True,
         )
-
-    with col_profile:
-        with st.popover("👤"):
-            from auth import get_cookie_manager, logout
-
-            user_name = st.session_state.get("username", "")
-            user_email = st.session_state.get("user_email", "")
-
-            # Show actual user details if we have profile data
-            if "auth_profile" in st.session_state:
-                p = st.session_state.auth_profile
-                user_name = f"{p.get('first_name', '')} {p.get('last_name', '')}".strip() or user_name
-
-            st.markdown(f"**{user_name}**")
-            st.caption(user_email)
-            st.divider()
-
-            if st.button("Logout", use_container_width=True):
-                logger.info("Logout button clicked in profile popover.")
-                cm = get_cookie_manager()
-                logout(cm)
 
     return col_edit, col_upload
 
