@@ -10,7 +10,7 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
-from config import DATE_BRANCH, DEFAULT_ROW_LIMIT, SYSTEM_COLUMNS, get_table
+from config import BRANCH_MONTHLY, DATE_BRANCH, DEFAULT_ROW_LIMIT, SYSTEM_COLUMNS, get_table
 from db.client import get_client
 from services.validation import NULL_TOKENS, clean_dataframe_for_db
 
@@ -80,6 +80,36 @@ def fetch_data(table: str, filters: dict | None = None, limit: int = DEFAULT_ROW
     except Exception:
         logger.exception("Error fetching data from %s", table)
         return pd.DataFrame()
+
+
+def fetch_existing(table: str, rows: pd.DataFrame) -> pd.DataFrame:
+    """Active stored rows that could match `rows` (same dates and branches). Uncached and raises on
+    failure, because an upload preview must never claim "all new" just because the read failed."""
+    cfg = get_table(table)
+    filters = {
+        cfg.date_col: sorted({pd.Timestamp(d).date() for d in rows[cfg.date_col].dropna()}),
+        "branch_name": sorted(set(rows["branch_name"].dropna().astype(str))),
+    }
+    if not filters[cfg.date_col] or not filters["branch_name"]:
+        return pd.DataFrame(columns=list(cfg.columns))
+    params = {"d": filters[cfg.date_col], "b": filters["branch_name"]}
+    query = (
+        f"SELECT {', '.join(cfg.columns)} FROM {table} FINAL "
+        f"WHERE is_active = 1 AND {cfg.date_col} IN {{d:Array(Date)}} AND branch_name IN {{b:Array(String)}}"
+    )
+    result = get_client().query(query, parameters=params)
+    return pd.DataFrame(result.result_rows, columns=result.column_names)
+
+
+def known_values(table: str, cols: tuple[str, ...] = ("branch_name", "series_group")) -> dict[str, set[str]]:
+    """Values already present (in this table or Branch Wise Monthly Target), to flag likely typos."""
+    known: dict[str, set[str]] = {c: set() for c in cols}
+    for source in {table, BRANCH_MONTHLY}:
+        index = get_filter_index(source)
+        for col in cols:
+            if col in index.columns:
+                known[col] |= {str(v).strip().upper() for v in index[col].dropna()}
+    return {c: v for c, v in known.items() if v}
 
 
 @st.cache_data(ttl=300, show_spinner=False)

@@ -81,3 +81,12 @@ def render_header(title="Dashboard", hide_upload=False):
                 logout(cm)
 
     return col_edit, col_upload
+
+
+def show_error(message: str, exc: BaseException | None = None) -> None:
+    """Friendly error for users; technical details only in a collapsed expander (and in the logs)."""
+    st.error(f"❌ {message}")
+    if exc is not None:
+        logger.error("%s: %r", message, exc)
+        with st.expander("Technical details"):
+            st.code(f"{type(exc).__name__}: {exc}")

@@ -13,7 +13,7 @@ class TestRobustReadCsv:
     def test_utf8_comma(self):
         df = robust_read_csv(io.BytesIO(b"branch_name,target_value1\nA,100\nB,200\n"))
         assert df.columns.tolist() == ["branch_name", "target_value1"]
-        assert df["target_value1"].tolist() == [100, 200]
+        assert df["target_value1"].tolist() == ["100", "200"]  # cells stay text; validation parses them
 
     def test_utf8_bom_stripped(self):
         df = robust_read_csv(io.BytesIO((BOM + "branch_name,x\nA,1\n").encode("utf-8")))
