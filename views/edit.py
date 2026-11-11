@@ -116,8 +116,9 @@ def edit_screen(cfg: TableConfig) -> None:
             "EDIT",
             target_table=table,
             record_count=report.saved_rows,
-            before_state=original_rows.to_dict(orient="records"),
-            after_state=rows_to_update.to_dict(orient="records"),
+            # stored as clean values (numbers, not "₹1,00,000.00") so the audit log is queryable
+            before_state=clean_dataframe_for_db(original_rows).to_dict(orient="records"),
+            after_state=clean_dataframe_for_db(rows_to_update).to_dict(orient="records"),
             error_message="; ".join(report.errors) or None,
         )
         if report.daily_rows:

@@ -7,8 +7,10 @@ from db.repository import get_all_filter_values
 from ui.formatting import format_column
 
 
-def _widget_key(prefix: str, table: str, col: str) -> str:
-    return f"{prefix}_filter_{col}_{table}"
+def _widget_key(prefix: str, table: str, col: str, version: int) -> str:
+    # The version changes on "Reset Filters": the browser keeps a widget's last value for as long as
+    # its key stays the same, so clearing session_state alone does not empty the widgets on screen.
+    return f"{prefix}_filter_{col}_{table}_v{version}"
 
 
 def _active(selections: dict) -> dict:
@@ -24,10 +26,11 @@ def render_sidebar_filters(cfg: TableConfig, prefix: str) -> tuple[dict, bool]:
         st.session_state[f"{state_key}_table"] = table
     selections: dict = st.session_state[state_key]
     before = _active(selections)
+    version = st.session_state.setdefault(f"{state_key}_version", 0)
 
     # Pick up what the user changed in the widgets on the previous interaction.
     for col in cfg.filter_cols:
-        key = _widget_key(prefix, table, col)
+        key = _widget_key(prefix, table, col, version)
         if key in st.session_state:
             selections[col] = st.session_state[key]
 
@@ -35,7 +38,7 @@ def render_sidebar_filters(cfg: TableConfig, prefix: str) -> tuple[dict, bool]:
 
     st.sidebar.subheader("\U0001f50d Filters")
     for col in cfg.filter_cols:
-        key = _widget_key(prefix, table, col)
+        key = _widget_key(prefix, table, col, version)
         if col == "date":
             prev = list(selections.get(col) or [])
             st.sidebar.caption("\U0001f4c5 Select Date Range")
@@ -54,7 +57,8 @@ def render_sidebar_filters(cfg: TableConfig, prefix: str) -> tuple[dict, bool]:
     if st.sidebar.button("\U0001f504 Reset Filters", width="stretch", key=f"{prefix}_reset_filters"):
         st.session_state[state_key] = {}
         for col in cfg.filter_cols:
-            st.session_state.pop(_widget_key(prefix, table, col), None)
+            st.session_state.pop(_widget_key(prefix, table, col, version), None)
+        st.session_state[f"{state_key}_version"] = version + 1
         st.rerun()
 
     active = _active(selections)
