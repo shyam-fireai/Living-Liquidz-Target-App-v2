@@ -23,6 +23,7 @@ def log_execution_time(func):
         duration = end_time - start_time
         print(f"[LOG] {func.__name__} executed in {duration:.4f} seconds")
         return result
+
     return wrapper
 
 
@@ -49,30 +50,53 @@ def format_sql_values(values):
 # -------------------------------
 TABLE_SCHEMAS = {
     "branch_wise_monthly_target": [
-        "month", "branch_name", "series_group",
-        "target_value1", "incentive_value1",
-        "target_value2", "incentive_value2",
-        "target_value3", "incentive_value3",
-        "target_value4", "incentive_value4",
-        "target_value5", "incentive_value5"
+        "month",
+        "branch_name",
+        "series_group",
+        "target_value1",
+        "incentive_value1",
+        "target_value2",
+        "incentive_value2",
+        "target_value3",
+        "incentive_value3",
+        "target_value4",
+        "incentive_value4",
+        "target_value5",
+        "incentive_value5",
     ],
     "date_branch_wise_target": [
-        "date", "branch_name", "series_group",
-        "target_value1", "incentive_value1",
-        "target_value2", "incentive_value2",
-        "target_value3", "incentive_value3",
-        "target_value4", "incentive_value4",
-        "target_value5", "incentive_value5"
+        "date",
+        "branch_name",
+        "series_group",
+        "target_value1",
+        "incentive_value1",
+        "target_value2",
+        "incentive_value2",
+        "target_value3",
+        "incentive_value3",
+        "target_value4",
+        "incentive_value4",
+        "target_value5",
+        "incentive_value5",
     ],
     "brand_wise_monthly_target": [
-        "month", "branch_name", "series_group",
-        "item_code", "item_name", "pack_name",
-        "target_qty1", "incentive_value1",
-        "target_qty2", "incentive_value2",
-        "target_qty3", "incentive_value3",
-        "target_qty4", "incentive_value4",
-        "target_qty5", "incentive_value5"
-    ]
+        "month",
+        "branch_name",
+        "series_group",
+        "item_code",
+        "item_name",
+        "pack_name",
+        "target_qty1",
+        "incentive_value1",
+        "target_qty2",
+        "incentive_value2",
+        "target_qty3",
+        "incentive_value3",
+        "target_qty4",
+        "incentive_value4",
+        "target_qty5",
+        "incentive_value5",
+    ],
 }
 
 
@@ -84,19 +108,19 @@ TABLE_SCHEMAS = {
 def get_client():
     logger.info("Initializing ClickHouse client...")
     try:
-        with open('secrets.json') as f:
+        with open("secrets.json") as f:
             creds = json.load(f)
-        conf = creds['data_clickhouse']
+        conf = creds["data_clickhouse"]
         client = clickhouse_connect.get_client(
-            host=conf['host'],
-            port=conf['port'],
-            username=conf['username'],
-            password=conf['password'],
-            database=conf['database'],
+            host=conf["host"],
+            port=conf["port"],
+            username=conf["username"],
+            password=conf["password"],
+            database=conf["database"],
             # Local Docker: "secure": false in secrets.json; live server: "secure": true
-            secure=bool(conf.get('secure', False)),
+            secure=bool(conf.get("secure", False)),
             connect_timeout=30,
-            send_receive_timeout=60
+            send_receive_timeout=60,
         )
         logger.info(f"ClickHouse client connected successfully to {conf['host']}")
         return client
@@ -160,7 +184,7 @@ def get_filter_index(table):
         cols = ["month", "branch_name", "series_group"]
 
     query = f"""
-        SELECT DISTINCT {', '.join(cols)}
+        SELECT DISTINCT {", ".join(cols)}
         FROM {table} FINAL
         WHERE is_active = 1
     """
@@ -203,7 +227,7 @@ def get_all_filter_values(table, current_selections=None):
                         elif len(vals) == 1:
                             # Partial range: match start date exactly for now
                             start = pd.to_datetime(vals[0]).tz_localize(None)
-                            mask &= (series_dt == start)
+                            mask &= series_dt == start
                     # Handle Multiselect
                     elif isinstance(vals, (list, tuple)):
                         mask &= index_df[col].astype(str).isin([str(v) for v in vals])
@@ -229,8 +253,10 @@ def clean_dataframe_for_db(df):
         elif any(x in col.lower() for x in ["target", "incentive", "qty"]):
             # Ensure targets, incentives and quantities are numeric
             # Clean any ₹ or , symbols if they exist (allows us to save from formatted editor)
-            df[col] = df[col].astype(str).str.replace("₹", "", regex=False).str.replace(",", "", regex=False).str.strip()
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0).astype(float)
+            df[col] = (
+                df[col].astype(str).str.replace("₹", "", regex=False).str.replace(",", "", regex=False).str.strip()
+            )
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0).astype(float)
         elif df[col].dtype == "object":
             # For other object types, fill with empty string
             df[col] = df[col].fillna("").astype(str).str.strip()
@@ -265,7 +291,7 @@ def insert_dataframe(table, df):
                 df[col] = df[col].fillna("").astype(str).str.strip()
                 df[col] = df[col].replace(["NONE", "NAN", "<NA>", "NULL", "none", "nan", "null"], "")
             elif any(t in ch_type for t in ["Decimal", "Float", "Int"]):
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0).astype(float)
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0).astype(float)
             elif "Date" in ch_type:
                 df[col] = pd.to_datetime(df[col]).dt.date
 
@@ -308,10 +334,7 @@ def format_column(col):
 
 def remove_zero_columns(df):
     # Columns that should ALWAYS be shown regardless of being zero
-    protected_cols = [
-        "month", "date", "branch_name", "series_group", "series",
-        "item_code", "item_name", "pack_name"
-    ]
+    protected_cols = ["month", "date", "branch_name", "series_group", "series", "item_code", "item_name", "pack_name"]
 
     # Identify non-protected columns
     other_cols = [c for c in df.columns if c not in protected_cols]
@@ -319,7 +342,7 @@ def remove_zero_columns(df):
         return df
 
     # Check which of these columns have at least one non-zero value
-    num_df = df[other_cols].apply(pd.to_numeric, errors='coerce').fillna(0)
+    num_df = df[other_cols].apply(pd.to_numeric, errors="coerce").fillna(0)
     non_zero_cols = set(num_df.columns[(num_df != 0).any()].tolist())
 
     # Build final column list
@@ -346,9 +369,7 @@ def format_indian_number(x, show_rupee=True):
         if len(num) > 3:
             last3 = num[-3:]
             rest = num[:-3]
-            rest = ",".join(
-                [rest[max(i-2, 0):i] for i in range(len(rest), 0, -2)][::-1]
-            )
+            rest = ",".join([rest[max(i - 2, 0) : i] for i in range(len(rest), 0, -2)][::-1])
             num = rest + "," + last3
 
         prefix = "₹" if show_rupee else ""
@@ -366,6 +387,7 @@ def apply_currency_format(df):
             df[col] = df[col].apply(lambda x: format_indian_number(x, show_rupee=False))
     return df
 
+
 # -------------------------------
 # AUDIT LOGGING
 # -------------------------------
@@ -374,11 +396,22 @@ def json_serial(obj):
     from datetime import date, datetime
 
     import pandas as pd
+
     if isinstance(obj, (datetime, date, pd.Timestamp)):
         return obj.isoformat()
     return str(obj)
 
-def log_audit_action(action_type, target_table=None, record_count=0, before_state=None, after_state=None, error_message=None, metadata=None, user_email=None):
+
+def log_audit_action(
+    action_type,
+    target_table=None,
+    record_count=0,
+    before_state=None,
+    after_state=None,
+    error_message=None,
+    metadata=None,
+    user_email=None,
+):
     logger.info(f"Recording Audit Action: {action_type} for {target_table or 'Global'}")
     try:
         client = get_client()
@@ -393,6 +426,7 @@ def log_audit_action(action_type, target_table=None, record_count=0, before_stat
         if not user_email:
             try:
                 import urllib.parse
+
                 raw_u = getattr(st.context, "cookies", {}).get("auth_user")
                 if raw_u:
                     user_email = urllib.parse.unquote(raw_u)
@@ -412,7 +446,7 @@ def log_audit_action(action_type, target_table=None, record_count=0, before_stat
             "device_info": "",
             "ip_address": "",
             "error_message": error_message or "",
-            "metadata": json.dumps(metadata, default=json_serial) if metadata else ""
+            "metadata": json.dumps(metadata, default=json_serial) if metadata else "",
         }
 
         query = """

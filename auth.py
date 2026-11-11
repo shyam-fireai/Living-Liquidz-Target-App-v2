@@ -18,13 +18,14 @@ logger = logging.getLogger(__name__)
 # Fallback Cookie Secret since user stated they don't have one right now
 COOKIE_SECRET = "fallback_temporary_dev_secret_key"
 
+
 # AuthService class (backend)
 class AuthService:
     def __init__(self):
         # Load from secrets.json as requested, fallback to environment variables
         logger.info("Initializing AuthService...")
         try:
-            with open('secrets.json') as f:
+            with open("secrets.json") as f:
                 creds = json.load(f)
             self.base_url = creds.get("FIREAI_BASE_URL", os.getenv("FIREAI_BASE_URL"))
             self.api_key = creds.get("FIREAI_API_KEY", os.getenv("FIREAI_API_KEY"))
@@ -60,18 +61,8 @@ class AuthService:
             return False, "Authentication service not configured. Please check secrets.json"
 
         url = f"{self.base_url}/users/v1/authentication/login"
-        payload = {
-            "data": {
-                "email": email,
-                "password": password,
-                "provider": "fireai",
-                "platform": "app"
-            }
-        }
-        headers = {
-            "Content-Type": "application/json",
-            "x-fireai-api-key": self.api_key
-        }
+        payload = {"data": {"email": email, "password": password, "provider": "fireai", "platform": "app"}}
+        headers = {"Content-Type": "application/json", "x-fireai-api-key": self.api_key}
 
         try:
             logger.info(f"Sending login request to: {url}")
@@ -92,16 +83,20 @@ class AuthService:
             logger.error(f"Unexpected error during login: {e}")
             return False, "An unexpected error occurred."
 
+
 # Initialize auth service
 auth_service = AuthService()
+
 
 def log_to_audit(action_type, message=None, user_email=None):
     """Bridge to the audit logger in db.py"""
     try:
         from db import log_audit_action
+
         log_audit_action(action_type=action_type, error_message=message, user_email=user_email)
     except Exception as e:
         logger.error(f"Audit Log Failed: {e}")
+
 
 # Helper functions
 def _generate_session_token(username: str) -> str:
@@ -109,16 +104,19 @@ def _generate_session_token(username: str) -> str:
     data = f"{username}:{timestamp}:{COOKIE_SECRET}"
     return base64.b64encode(hashlib.sha256(data.encode()).digest()).decode()[:32]
 
+
 def get_cookie_manager():
     if "cookie_manager_instance" not in st.session_state:
         logger.info("Initializing CookieManager component...")
         st.session_state.cookie_manager_instance = stx.CookieManager(key="cookie_manager")
     return st.session_state.cookie_manager_instance
 
+
 def show_login_page():
     cookie_manager = get_cookie_manager()
 
-    st.markdown("""
+    st.markdown(
+        """
         <style>
         /* 1. Global Centering Reset */
         [data-testid="stAppViewContainer"] {
@@ -165,7 +163,9 @@ def show_login_page():
             font-weight: 600;
         }
         </style>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     # Clean, Centered Content
     st.title("Secure Login")
@@ -195,7 +195,7 @@ def show_login_page():
                     "last_name": user_data.get("last_name"),
                     "id": user_data.get("id"),
                     "access_token": response_data.get("access_token"),
-                    "refresh_token": response_data.get("refresh_token")
+                    "refresh_token": response_data.get("refresh_token"),
                 }
                 # 4. Store in session state (Fast path access)
                 st.session_state.session_token = token
@@ -204,7 +204,7 @@ def show_login_page():
                 # 4b. CLEAR the Hard Logout Lock (Unlock the door)
                 st.session_state.logout_triggered = False
                 if "logout_audited" in st.session_state:
-                     del st.session_state.logout_audited
+                    del st.session_state.logout_audited
 
                 # 5. Set cookies (1-Hour Secure Persistence)
                 # This ensures the session handles Ctrl+R but stays secure
@@ -226,8 +226,6 @@ def show_login_page():
                 st.error(f"🔒 {response_data}")
 
     st.stop()
-
-
 
 
 def require_login():
@@ -327,7 +325,6 @@ def require_login():
                 pass
         return True
 
-
     # 6. Fallback (If sentinel exists but data is missing)
     show_login_page()
     return False
@@ -335,6 +332,7 @@ def require_login():
     # 5. Completely unauthenticated
     show_login_page()
     return False
+
 
 def logout(cookie_manager=None):
     """Stages a logout request. The actual purge happens in the top-level require_login guard."""
@@ -349,6 +347,7 @@ def logout(cookie_manager=None):
     # 2. Stage the server-side trigger
     st.session_state.logout_triggered = True
     st.rerun()
+
 
 # Main logic
 if __name__ == "__main__":

@@ -21,11 +21,7 @@ logger = logging.getLogger(__name__)
 # -------------------------------
 # UI SETTINGS (MINIMALIST THEME)
 # -------------------------------
-st.set_page_config(
-    page_title="Living Liquid Dashboard",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="Living Liquid Dashboard", layout="wide", initial_sidebar_state="expanded")
 
 from auth import require_login  # noqa: E402 - must follow st.set_page_config
 
@@ -58,18 +54,18 @@ TABLE_CONFIG = {
     "branch_wise_monthly_target": {
         "name": "Branch Wise Monthly Target",
         "filters": ["month", "branch_name", "series_group"],
-        "currency": True
+        "currency": True,
     },
     "brand_wise_monthly_target": {
         "name": "Brand Wise Monthly Target",
         "filters": ["month", "branch_name", "series_group", "item_code", "item_name", "pack_name"],
-        "currency": False
+        "currency": False,
     },
     "date_branch_wise_target": {
         "name": "Date & Branch Wise Target",
         "filters": ["date", "branch_name", "series_group"],
-        "currency": True
-    }
+        "currency": True,
+    },
 }
 
 # -------------------------------
@@ -109,7 +105,7 @@ selected_table = table_keys[table_display.index(selected_display)]
 if st.session_state.current_table != selected_table:
     logger.info(f"Synchronizing table state: {st.session_state.current_table} -> {selected_table}")
     st.session_state.applied_filters = {}
-    st.session_state.temp_filters = {} # Explicitly reset to ensure cold start is clean
+    st.session_state.temp_filters = {}  # Explicitly reset to ensure cold start is clean
     st.session_state.upload_done = False
     st.session_state.upload_msg = ""
     st.session_state.current_table = selected_table
@@ -119,12 +115,15 @@ if st.session_state.current_table != selected_table:
 # -------------------------------
 if st.session_state.page == "edit":
     if selected_table == "date_branch_wise_target":
-        st.warning("⚠️ Editing 'Date & Branch Wise Target' directly is disabled. Please edit via 'Branch Wise Monthly Target'.")
+        st.warning(
+            "⚠️ Editing 'Date & Branch Wise Target' directly is disabled. Please edit via 'Branch Wise Monthly Target'."
+        )
         if st.button("⬅️ Back to Dashboard"):
             st.session_state.page = "dashboard"
             st.rerun()
         st.stop()
     from edit import edit_screen
+
     edit_screen(selected_table)
     st.stop()
 
@@ -133,12 +132,15 @@ if st.session_state.page == "edit":
 # -------------------------------
 if st.session_state.page == "upload":
     if selected_table == "date_branch_wise_target":
-        st.warning("⚠️ Direct upload for 'Date & Branch Wise Target' is disabled. Please upload via 'Branch Wise Monthly Target'.")
+        st.warning(
+            "⚠️ Direct upload for 'Date & Branch Wise Target' is disabled. Please upload via 'Branch Wise Monthly Target'."
+        )
         if st.button("⬅️ Back to Dashboard"):
             st.session_state.page = "dashboard"
             st.rerun()
         st.stop()
     from upload import upload_screen
+
     upload_screen(selected_table)
     st.stop()
 
@@ -146,7 +148,7 @@ if st.session_state.page == "upload":
 # HEADER & NAVIGATION (SINGLE ROW)
 # -------------------------------
 display_name = TABLE_CONFIG[selected_table]["name"]
-is_date_branch_target = (selected_table == "date_branch_wise_target")
+is_date_branch_target = selected_table == "date_branch_wise_target"
 
 # For Date & Branch Wise Target, hide Edit and Upload buttons from header
 if is_date_branch_target:
@@ -197,14 +199,14 @@ for col in filters_config:
             "Range",
             value=(d1_val, d2_val) if d1_val and d2_val else (d1_val,) if d1_val else [],
             key=f"sb_filter_{col}_{selected_table}",
-            label_visibility="collapsed"
+            label_visibility="collapsed",
         )
     else:
         selected = st.sidebar.multiselect(
             format_column(col),
             values,
             key=f"sb_filter_{col}_{selected_table}",
-            default=[v for v in st.session_state.temp_filters.get(col, []) if v in values]
+            default=[v for v in st.session_state.temp_filters.get(col, []) if v in values],
         )
 
     # Update temp state immediately for cascading effect next rerun
@@ -241,7 +243,7 @@ with st.spinner(f"Loading {TABLE_CONFIG[selected_table]['name']}..."):
 # CLEAN DATA
 # -------------------------------
 # Drop system columns
-df = df.drop(columns=['version', 'updated_at', 'is_active'], errors='ignore')
+df = df.drop(columns=["version", "updated_at", "is_active"], errors="ignore")
 
 # Remove zero/empty columns
 df = remove_zero_columns(df)
@@ -265,15 +267,12 @@ for col in ["Date", "Month"]:
 # DISPLAY (FLEXIBLE DATAFRAME)
 # -------------------------------
 # Use native formatting ONLY for columns that are still numeric
-numeric_cols = [
-    c for c in df.columns
-    if any(x in c for x in ["Qty", "Value"]) and pd.api.types.is_numeric_dtype(df[c])
-]
+numeric_cols = [c for c in df.columns if any(x in c for x in ["Qty", "Value"]) and pd.api.types.is_numeric_dtype(df[c])]
 config = {c: st.column_config.NumberColumn(format="%.2f") for c in numeric_cols}
 
 # Apply Pandas styling to force bold and black headers while keeping the table interactive
 styled_df = df.style.set_table_styles(
-    [{'selector': 'th', 'props': [('font-weight', 'bold !important'), ('color', 'black !important')]}]
+    [{"selector": "th", "props": [("font-weight", "bold !important"), ("color", "black !important")]}]
 )
 
 st.dataframe(styled_df, column_config=config, use_container_width=True, hide_index=True)

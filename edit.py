@@ -74,7 +74,7 @@ def edit_screen(selected_table):
     TABLE_FILTERS = {
         "branch_wise_monthly_target": ["month", "branch_name", "series_group"],
         "date_branch_wise_target": ["date", "branch_name", "series_group"],
-        "brand_wise_monthly_target": ["month", "branch_name", "series_group", "item_code", "item_name", "pack_name"]
+        "brand_wise_monthly_target": ["month", "branch_name", "series_group", "item_code", "item_name", "pack_name"],
     }
     filter_cols = TABLE_FILTERS.get(selected_table, [])
 
@@ -107,14 +107,14 @@ def edit_screen(selected_table):
                     "Range",
                     value=(d1_val, d2_val) if d1_val and d2_val else (d1_val,) if d1_val else [],
                     key=f"ed_filter_{col}_{selected_table}",
-                    label_visibility="collapsed"
+                    label_visibility="collapsed",
                 )
             else:
                 selected = st.sidebar.multiselect(
                     col.replace("_", " ").title(),
                     values,
                     key=f"ed_filter_{col}_{selected_table}",
-                    default=[v for v in st.session_state.edit_temp_filters.get(col, []) if v in values]
+                    default=[v for v in st.session_state.edit_temp_filters.get(col, []) if v in values],
                 )
 
             if selected:
@@ -141,7 +141,9 @@ def edit_screen(selected_table):
             logger.info(f"Loading top 200 records for editing in {selected_table}")
             df = fetch_data(selected_table, limit=200)
         else:
-            logger.info(f"Loading filtered records for editing in {selected_table}: {st.session_state.edit_temp_filters}")
+            logger.info(
+                f"Loading filtered records for editing in {selected_table}: {st.session_state.edit_temp_filters}"
+            )
             df = fetch_data(selected_table, filters=st.session_state.edit_temp_filters, limit=200)
 
     # Update applied_filters for Save logic
@@ -154,10 +156,7 @@ def edit_screen(selected_table):
     # -------------------------------
     # REMOVE SYSTEM COLS
     # -------------------------------
-    display_df = df.drop(
-        columns=["is_active", "version", "updated_at"],
-        errors="ignore"
-    )
+    display_df = df.drop(columns=["is_active", "version", "updated_at"], errors="ignore")
 
     # Apply Indian formatting for display in the editor
     display_df = apply_currency_format(display_df)
@@ -172,7 +171,9 @@ def edit_screen(selected_table):
     # DATA EDITOR (With Pretty Headers)
     # -------------------------------
     if not st.session_state.edit_temp_filters:
-        st.info("ℹ️ **Showing first 200 records.** Use filters to narrow down. | 💡 **To save data**, first edit any cell in the table below.")
+        st.info(
+            "ℹ️ **Showing first 200 records.** Use filters to narrow down. | 💡 **To save data**, first edit any cell in the table below."
+        )
     else:
         st.info("💡 **To save data**, first edit any cell in the table below.")
     # We use column_config to show nice labels while keeping technical names for the code
@@ -182,12 +183,7 @@ def edit_screen(selected_table):
     editor_key = f"editor_{selected_table}_{st.session_state.editor_version}"
 
     edited_df = st.data_editor(
-        display_df,
-        width="stretch",
-        num_rows="fixed",
-        column_config=editor_config,
-        hide_index=False,
-        key=editor_key
+        display_df, width="stretch", num_rows="fixed", column_config=editor_config, hide_index=False, key=editor_key
     )
 
     # -------------------------------
@@ -254,7 +250,6 @@ def edit_screen(selected_table):
     # LIVE PREVIEW
     # -------------------------------
     if has_changed and not st.session_state.just_saved:
-
         # Robust diff detection using string versions
         conf_df = edited_df.copy()
 
@@ -264,7 +259,7 @@ def edit_screen(selected_table):
             conf_df.index = original_df.index
             conf_df.columns = original_df.columns
 
-        diff_mask = (conf_df.astype(str) != original_df.astype(str))
+        diff_mask = conf_df.astype(str) != original_df.astype(str)
 
         # Filter rows that have at least one change
         changed_mask = diff_mask.any(axis=1)
@@ -293,7 +288,6 @@ def edit_screen(selected_table):
                 MAX_ROWS = 200
 
                 with st.spinner("Loading data..."):
-
                     if applied_filters:
                         df = fetch_data(selected_table, filters=applied_filters, limit=MAX_ROWS)
                     else:
@@ -335,7 +329,14 @@ def edit_screen(selected_table):
                 key_cols_map = {
                     "branch_wise_monthly_target": ["month", "branch_name", "series_group"],
                     "date_branch_wise_target": ["date", "branch_name", "series_group"],
-                    "brand_wise_monthly_target": ["month", "branch_name", "series_group", "item_code", "item_name", "pack_name"]
+                    "brand_wise_monthly_target": [
+                        "month",
+                        "branch_name",
+                        "series_group",
+                        "item_code",
+                        "item_name",
+                        "pack_name",
+                    ],
                 }
                 curr_keys = key_cols_map.get(selected_table, [])
                 keys_to_kill = []
@@ -385,13 +386,15 @@ def edit_screen(selected_table):
                         target_table=selected_table,
                         record_count=len(rows_to_update),
                         before_state=before_dict,
-                        after_state=after_dict
+                        after_state=after_dict,
                     )
 
                     # Dual synchronization for branch_wise_monthly_target -> date_branch_wise_target
                     if selected_table == "branch_wise_monthly_target":
                         try:
-                            logger.info(f"Synchronizing {len(rows_to_update)} edited monthly target row(s) to date_branch_wise_target...")
+                            logger.info(
+                                f"Synchronizing {len(rows_to_update)} edited monthly target row(s) to date_branch_wise_target..."
+                            )
                             # Clean numeric columns before generating daily targets
                             clean_monthly_rows = clean_dataframe_for_db(rows_to_update.copy())
                             clean_monthly_rows["month"] = pd.to_datetime(clean_monthly_rows["month"])
@@ -418,7 +421,7 @@ def edit_screen(selected_table):
                                         action_type="EDIT",
                                         target_table="date_branch_wise_target",
                                         record_count=len(df_daily_sync),
-                                        metadata={"source": "branch_wise_monthly_target_edit_sync"}
+                                        metadata={"source": "branch_wise_monthly_target_edit_sync"},
                                     )
                                     msg = f"{msg} | date_branch_wise_target: {len(df_daily_sync)} daily records updated successfully"
                                     logger.info(f"Daily targets synced: {msg}")
@@ -447,6 +450,7 @@ def edit_screen(selected_table):
 
                     # Give ClickHouse a full second to ensure FINAL projection is updated
                     import time
+
                     time.sleep(1.0)
 
                     # Stay on page: No page redirect needed, just refresh the table

@@ -43,18 +43,18 @@ def robust_read_csv(uploaded_file):
         try:
             text = raw_bytes.decode(enc)
             # Replace non-breaking spaces (\xa0) and unicode spaces with standard space
-            text = text.replace('\xa0', ' ')
+            text = text.replace("\xa0", " ")
 
             # Read via StringIO using Python engine with sep=None to sniff delimiter
-            return pd.read_csv(io.StringIO(text), sep=None, engine='python')
+            return pd.read_csv(io.StringIO(text), sep=None, engine="python")
         except Exception as e:
             last_err = e
             continue
 
     # Fallback with replacement of un-decodable bytes
     try:
-        text = raw_bytes.decode('utf-8', errors='replace').replace('\xa0', ' ')
-        return pd.read_csv(io.StringIO(text), sep=None, engine='python')
+        text = raw_bytes.decode("utf-8", errors="replace").replace("\xa0", " ")
+        return pd.read_csv(io.StringIO(text), sep=None, engine="python")
     except Exception:
         raise (last_err or ValueError("Unable to parse CSV file.")) from None
 
@@ -71,6 +71,7 @@ def generate_daily_targets_from_monthly(df_monthly):
       - Targets distributed: target_value1 to target_value5.
       - Incentive values set to None (incentive not used in date branch wise target).
     """
+
     def distribute_target(monthly_val, ratios, n_days):
         if monthly_val is None or pd.isna(monthly_val) or monthly_val == 0:
             return [None] * n_days
@@ -123,21 +124,23 @@ def generate_daily_targets_from_monthly(df_monthly):
             daily_t5 = distribute_target(m_t5, ratios, n_days)
 
             for i in range(n_days):
-                daily_records.append({
-                    "date": date_strs[i],
-                    "branch_name": b_name,
-                    "series_group": s_group,
-                    "target_value1": daily_t1[i] if daily_t1[i] is not None else 0.0,
-                    "incentive_value1": 0.0,
-                    "target_value2": daily_t2[i] if daily_t2[i] is not None else 0.0,
-                    "incentive_value2": 0.0,
-                    "target_value3": daily_t3[i] if daily_t3[i] is not None else 0.0,
-                    "incentive_value3": 0.0,
-                    "target_value4": daily_t4[i] if daily_t4[i] is not None else 0.0,
-                    "incentive_value4": 0.0,
-                    "target_value5": daily_t5[i] if daily_t5[i] is not None else 0.0,
-                    "incentive_value5": 0.0,
-                })
+                daily_records.append(
+                    {
+                        "date": date_strs[i],
+                        "branch_name": b_name,
+                        "series_group": s_group,
+                        "target_value1": daily_t1[i] if daily_t1[i] is not None else 0.0,
+                        "incentive_value1": 0.0,
+                        "target_value2": daily_t2[i] if daily_t2[i] is not None else 0.0,
+                        "incentive_value2": 0.0,
+                        "target_value3": daily_t3[i] if daily_t3[i] is not None else 0.0,
+                        "incentive_value3": 0.0,
+                        "target_value4": daily_t4[i] if daily_t4[i] is not None else 0.0,
+                        "incentive_value4": 0.0,
+                        "target_value5": daily_t5[i] if daily_t5[i] is not None else 0.0,
+                        "incentive_value5": 0.0,
+                    }
+                )
 
     df_daily = pd.DataFrame(daily_records)
     if not df_daily.empty:
@@ -149,7 +152,6 @@ def generate_daily_targets_from_monthly(df_monthly):
 # UPLOAD SCREEN
 # -------------------------------
 def upload_screen(selected_table):
-
     # -------------------------------
     # UI THEME & HEADER
     # -------------------------------
@@ -171,11 +173,7 @@ def upload_screen(selected_table):
 
     sample_df = pd.DataFrame(columns=REQUIRED_COLUMNS[selected_table])
 
-    st.download_button(
-        "📥 Download Sample CSV",
-        sample_df.to_csv(index=False),
-        file_name=expected_filename
-    )
+    st.download_button("📥 Download Sample CSV", sample_df.to_csv(index=False), file_name=expected_filename)
 
     if selected_table == "date_branch_wise_target":
         st.info("""
@@ -196,7 +194,7 @@ def upload_screen(selected_table):
 
         try:
             df = robust_read_csv(uploaded_file)
-            df.columns = [str(c).strip().replace('\xa0', ' ').lower() for c in df.columns]
+            df.columns = [str(c).strip().replace("\xa0", " ").lower() for c in df.columns]
 
             required_cols = REQUIRED_COLUMNS[selected_table]
 
@@ -215,7 +213,9 @@ def upload_screen(selected_table):
                 try:
                     df["month"] = pd.to_datetime(df["month"])
                 except Exception:
-                    st.error("❌ **Invalid Month Format:** Some dates in the 'month' column are not recognized. Please use the format **YYYY-MM-DD** (e.g., **2026-03-01**).")
+                    st.error(
+                        "❌ **Invalid Month Format:** Some dates in the 'month' column are not recognized. Please use the format **YYYY-MM-DD** (e.g., **2026-03-01**)."
+                    )
                     return
 
                 # Strict Validation: Must be 1st of the month
@@ -223,15 +223,21 @@ def upload_screen(selected_table):
                 if not invalid_rows.empty:
                     # Row numbers are 2-indexed (+2) because header is Row 1
                     err_row_indices = [i + 2 for i in invalid_rows.index.tolist()]
-                    st.error(f"❌ **Data Format Error:** Invalid dates found in 'month' column at **Row(s): {err_row_indices}**")
-                    st.warning("All records must use the 1st day of the month (e.g. 2026-03-01). Entire data must be fixed before upload.")
+                    st.error(
+                        f"❌ **Data Format Error:** Invalid dates found in 'month' column at **Row(s): {err_row_indices}**"
+                    )
+                    st.warning(
+                        "All records must use the 1st day of the month (e.g. 2026-03-01). Entire data must be fixed before upload."
+                    )
                     return
 
             if "date" in df.columns:
                 try:
                     df["date"] = pd.to_datetime(df["date"])
                 except Exception:
-                    st.error("❌ **Invalid Date Format:** Some dates in the 'date' column are not recognized. Please use the format **YYYY-MM-DD** (e.g., **2026-04-17**).")
+                    st.error(
+                        "❌ **Invalid Date Format:** Some dates in the 'date' column are not recognized. Please use the format **YYYY-MM-DD** (e.g., **2026-04-17**)."
+                    )
                     return
 
             # -------------------------------
@@ -271,7 +277,7 @@ def upload_screen(selected_table):
                             action_type="UPLOAD",
                             target_table=selected_table,
                             record_count=len(df),
-                            metadata={"file_name": uploaded_file.name}
+                            metadata={"file_name": uploaded_file.name},
                         )
 
                         # Dual upload enhancement for branch_wise_monthly_target
@@ -280,14 +286,19 @@ def upload_screen(selected_table):
                                 logger.info("Generating dynamic daily targets for date_branch_wise_target...")
                                 df_daily = generate_daily_targets_from_monthly(df)
                                 if not df_daily.empty:
-                                    logger.info(f"Inserting {len(df_daily)} daily records into date_branch_wise_target...")
+                                    logger.info(
+                                        f"Inserting {len(df_daily)} daily records into date_branch_wise_target..."
+                                    )
                                     daily_success, daily_msg = insert_dataframe("date_branch_wise_target", df_daily)
                                     if daily_success:
                                         log_audit_action(
                                             action_type="UPLOAD",
                                             target_table="date_branch_wise_target",
                                             record_count=len(df_daily),
-                                            metadata={"source": "branch_wise_monthly_target_upload", "file_name": uploaded_file.name}
+                                            metadata={
+                                                "source": "branch_wise_monthly_target_upload",
+                                                "file_name": uploaded_file.name,
+                                            },
                                         )
                                         msg = f"{msg} | date_branch_wise_target: {len(df_daily)} daily records updated successfully"
                                         logger.info(f"Dual Upload Complete: {msg}")
@@ -305,7 +316,9 @@ def upload_screen(selected_table):
                         st.rerun()
                     else:
                         logger.error(f"Upload Failed: {msg}")
-                        log_audit_action(action_type="ERROR", target_table=selected_table, error_message=f"DB Insert Failed: {msg}")
+                        log_audit_action(
+                            action_type="ERROR", target_table=selected_table, error_message=f"DB Insert Failed: {msg}"
+                        )
                         st.error(f"❌ {msg}")
 
             else:

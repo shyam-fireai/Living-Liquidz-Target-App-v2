@@ -4,6 +4,7 @@ import streamlit as st
 
 logger = logging.getLogger(__name__)
 
+
 def inject_minimalist_theme():
     """Injects high-quality CSS for an Absolute Top Toolbar style."""
 
@@ -224,6 +225,7 @@ def inject_minimalist_theme():
     logger.info("Injecting minimalist premium theme CSS...")
     st.markdown(premium_css, unsafe_allow_html=True)
 
+
 def render_header(title="Dashboard", hide_upload=False):
     """Renders a single-row sticky toolbar at absolute zero-gap top."""
     logger.info(f"Rendering header toolbar for: {title}")
@@ -234,10 +236,13 @@ def render_header(title="Dashboard", hide_upload=False):
         col_upload = None
     else:
         # Grid layout for the toolbar, slightly larger action cols to avoid text wrapping
-        col_brand, col_spacer, col_edit, col_upload, col_profile = st.columns([3, 3.6, 1.4, 1.4, 0.6], vertical_alignment="center")
+        col_brand, col_spacer, col_edit, col_upload, col_profile = st.columns(
+            [3, 3.6, 1.4, 1.4, 0.6], vertical_alignment="center"
+        )
 
     with col_brand:
-        st.markdown(f"""
+        st.markdown(
+            f"""
             <div style="display: flex; align-items: center; gap: 12px;">
                 <button
                     onclick="window.parent.document.querySelector('button[aria-label=\\'Open sidebar\\'], button[data-testid=\\'stSidebarCollapseButton\\']').click();"
@@ -269,7 +274,9 @@ def render_header(title="Dashboard", hide_upload=False):
                     }}
                 }}
             </style>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
     with col_profile:
         with st.popover("👤"):

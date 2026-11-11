@@ -56,7 +56,15 @@ class TestGenerateDailyTargets:
 
     def test_zero_and_missing_targets_become_zero(self):
         df = _monthly(
-            [{"month": "2026-02-01", "branch_name": "A", "series_group": "X", "target_value1": 0, "target_value2": None}]
+            [
+                {
+                    "month": "2026-02-01",
+                    "branch_name": "A",
+                    "series_group": "X",
+                    "target_value1": 0,
+                    "target_value2": None,
+                }
+            ]
         )
         daily = generate_daily_targets_from_monthly(df)
         assert len(daily) == 28

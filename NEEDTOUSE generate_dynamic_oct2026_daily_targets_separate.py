@@ -34,11 +34,13 @@ def generate_october_weights():
     for d in dates:
         # d.weekday(): 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun
         w = 5.0 if d.weekday() in [4, 5, 6] else 3.0
-        weights.append({
-            "date": d.strftime("%Y-%m-%d"),
-            "day": d.strftime("%a").lower(),
-            "weight": w,
-        })
+        weights.append(
+            {
+                "date": d.strftime("%Y-%m-%d"),
+                "day": d.strftime("%a").lower(),
+                "weight": w,
+            }
+        )
 
     df_weights = pd.DataFrame(weights)
     total_weight = df_weights["weight"].sum()
@@ -140,22 +142,24 @@ def main():
 
         is_match = (abs(diff1) < 0.001) and (abs(diff2) < 0.001) and (abs(diff3) < 0.001)
 
-        verification_records.append({
-            "branch_name": b_name,
-            "series_group": s_group,
-            "monthly_target_1": m_t1,
-            "daily_sum_1": sum_d1,
-            "diff_1": diff1,
-            "monthly_target_2": m_t2,
-            "daily_sum_2": sum_d2,
-            "diff_2": diff2,
-            "monthly_target_3": m_t3,
-            "daily_sum_3": sum_d3,
-            "diff_3": diff3,
-            "monthly_total_all": (m_t1 or 0.0) + (m_t2 or 0.0) + (m_t3 or 0.0),
-            "daily_total_all": sum_d1 + sum_d2 + sum_d3,
-            "status": "EXACT MATCH" if is_match else "MISMATCH",
-        })
+        verification_records.append(
+            {
+                "branch_name": b_name,
+                "series_group": s_group,
+                "monthly_target_1": m_t1,
+                "daily_sum_1": sum_d1,
+                "diff_1": diff1,
+                "monthly_target_2": m_t2,
+                "daily_sum_2": sum_d2,
+                "diff_2": diff2,
+                "monthly_target_3": m_t3,
+                "daily_sum_3": sum_d3,
+                "diff_3": diff3,
+                "monthly_total_all": (m_t1 or 0.0) + (m_t2 or 0.0) + (m_t3 or 0.0),
+                "daily_total_all": sum_d1 + sum_d2 + sum_d3,
+                "status": "EXACT MATCH" if is_match else "MISMATCH",
+            }
+        )
 
         running_mtd1 = 0.0
         running_mtd2 = 0.0
@@ -168,9 +172,9 @@ def main():
             val4 = daily_t4[i]
             val5 = daily_t5[i]
 
-            running_mtd1 += (val1 or 0.0)
-            running_mtd2 += (val2 or 0.0)
-            running_mtd3 += (val3 or 0.0)
+            running_mtd1 += val1 or 0.0
+            running_mtd2 += val2 or 0.0
+            running_mtd3 += val3 or 0.0
 
             # DB Schema matching ClickHouse table structure
             db_row = {
@@ -224,7 +228,9 @@ def main():
         print(mismatches.head())
         raise ValueError("Verification failed!")
     else:
-        print(f"VERIFICATION SUCCESS: All {len(df_verif)} branch records matched daily sums across Target 1, 2, 3 to 0.00 exact precision!")
+        print(
+            f"VERIFICATION SUCCESS: All {len(df_verif)} branch records matched daily sums across Target 1, 2, 3 to 0.00 exact precision!"
+        )
 
     grand_total_d1 = df_db["target_value1"].sum()
     grand_total_d2 = df_db["target_value2"].sum()
