@@ -92,8 +92,8 @@ def get_client():
             username=conf['username'],
             password=conf['password'],
             database=conf['database'],
-            # Connected with Localhost while changing db creds to  live pls add the secure = True and remove compress
-            secure=True,
+            # Local Docker: "secure": false in secrets.json; live server: "secure": true
+            secure=bool(conf.get('secure', False)),
             connect_timeout=30,
             send_receive_timeout=60
         )
@@ -223,15 +223,17 @@ def clean_dataframe_for_db(df):
     for col in df.columns:
         if col in string_cols:
             # Force to string, uppercase, and fill nulls with empty string
-            df[col] = df[col].astype(str).str.upper().replace(["NONE", "NAN", "<NA>"], "")
+            df[col] = df[col].fillna("").astype(str).str.strip().str.upper()
+            df[col] = df[col].replace(["NONE", "NAN", "<NA>", "NULL"], "")
         elif any(x in col.lower() for x in ["target", "incentive", "qty"]):
             # Ensure targets, incentives and quantities are numeric
             # Clean any ₹ or , symbols if they exist (allows us to save from formatted editor)
-            df[col] = df[col].astype(str).str.replace("₹", "", regex=False).str.replace(",", "", regex=False)
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            df[col] = df[col].astype(str).str.replace("₹", "", regex=False).str.replace(",", "", regex=False).str.strip()
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0).astype(float)
         elif df[col].dtype == "object":
             # For other object types, fill with empty string
-            df[col] = df[col].fillna("")
+            df[col] = df[col].fillna("").astype(str).str.strip()
+            df[col] = df[col].replace(["NONE", "NAN", "<NA>", "NULL"], "")
         else:
             # For integers and others
             df[col] = df[col].fillna(0)
@@ -247,20 +249,32 @@ def insert_dataframe(table, df):
     try:
         client = get_client()
 
+        # DYNAMIC COLUMN DETECTION & TYPE ENFORCEMENT
+        desc = client.query(f"DESCRIBE {table}").result_rows
+        db_cols_meta = {row[0]: row[1] for row in desc}
+        
         # Apply robust cleaning
         df = clean_dataframe_for_db(df)
 
-        # DYNAMIC COLUMN DETECTION
-        desc = client.query(f"DESCRIBE {table}").result_rows
-        db_cols = [row[0] for row in desc]
-        
+        # Explicitly enforce types expected by ClickHouse to prevent serialization failures
+        for col, ch_type in db_cols_meta.items():
+            if col in ["version", "updated_at", "is_active"] or col not in df.columns:
+                continue
+            if "String" in ch_type:
+                df[col] = df[col].fillna("").astype(str).str.strip()
+                df[col] = df[col].replace(["NONE", "NAN", "<NA>", "NULL", "none", "nan", "null"], "")
+            elif any(t in ch_type for t in ["Decimal", "Float", "Int"]):
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0).astype(float)
+            elif "Date" in ch_type:
+                df[col] = pd.to_datetime(df[col]).dt.date
+
         # Add system columns and ensure they exist
         df["version"] = int(time.time() + 1)
         df["updated_at"] = datetime.now()
         df["is_active"] = 1
 
         # Keep only columns that exist in BOTH the dataframe and the database
-        final_cols = [c for c in db_cols if c in df.columns]
+        final_cols = [c for c in db_cols_meta.keys() if c in df.columns]
         df = df[final_cols]
 
         logger.info(f"Inserting into {table} with columns: {final_cols}")
