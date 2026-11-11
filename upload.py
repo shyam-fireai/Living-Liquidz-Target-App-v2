@@ -1,9 +1,18 @@
-import streamlit as st
-import pandas as pd
 import io
-from db import TABLE_SCHEMAS, insert_dataframe, get_client, format_column, remove_zero_columns, apply_currency_format, log_audit_action
-from style_utils import inject_minimalist_theme, render_header
 import logging
+
+import pandas as pd
+import streamlit as st
+
+from db import (
+    TABLE_SCHEMAS,
+    apply_currency_format,
+    format_column,
+    insert_dataframe,
+    log_audit_action,
+    remove_zero_columns,
+)
+from style_utils import inject_minimalist_theme, render_header
 
 logger = logging.getLogger(__name__)
 
@@ -25,29 +34,29 @@ def robust_read_csv(uploaded_file):
     - Inconsistent line terminators
     """
     raw_bytes = uploaded_file.getvalue() if hasattr(uploaded_file, "getvalue") else uploaded_file.read()
-    
+
     # Common encodings encountered in Excel exports and CSVs
     encodings = ["utf-8-sig", "utf-8", "cp1252", "latin1", "iso-8859-1"]
-    
+
     last_err = None
     for enc in encodings:
         try:
             text = raw_bytes.decode(enc)
             # Replace non-breaking spaces (\xa0) and unicode spaces with standard space
             text = text.replace('\xa0', ' ')
-            
+
             # Read via StringIO using Python engine with sep=None to sniff delimiter
             return pd.read_csv(io.StringIO(text), sep=None, engine='python')
         except Exception as e:
             last_err = e
             continue
-            
+
     # Fallback with replacement of un-decodable bytes
     try:
         text = raw_bytes.decode('utf-8', errors='replace').replace('\xa0', ' ')
         return pd.read_csv(io.StringIO(text), sep=None, engine='python')
     except Exception:
-        raise last_err if last_err else Exception("Unable to parse CSV file.")
+        raise (last_err or ValueError("Unable to parse CSV file.")) from None
 
 
 # -------------------------------
@@ -140,19 +149,19 @@ def generate_daily_targets_from_monthly(df_monthly):
 # UPLOAD SCREEN
 # -------------------------------
 def upload_screen(selected_table):
-    
+
     # -------------------------------
     # UI THEME & HEADER
     # -------------------------------
     inject_minimalist_theme()
     display_name = selected_table.replace("_", " ").title()
     col_edit, col_upload = render_header(title=f"Uploading: {display_name}", hide_upload=True)
-    
+
     with col_edit:
         if st.button("⬅️ Back", width="stretch"):
             st.session_state.page = "dashboard"
             st.rerun()
-            
+
     st.divider()
 
     # -------------------------------
@@ -208,7 +217,7 @@ def upload_screen(selected_table):
                 except Exception:
                     st.error("❌ **Invalid Month Format:** Some dates in the 'month' column are not recognized. Please use the format **YYYY-MM-DD** (e.g., **2026-03-01**).")
                     return
-                
+
                 # Strict Validation: Must be 1st of the month
                 invalid_rows = df[df["month"].dt.day != 1]
                 if not invalid_rows.empty:
@@ -229,7 +238,7 @@ def upload_screen(selected_table):
             # PREVIEW (Hide zero columns, format currency, and rename headers for display)
             # -------------------------------
             preview_df = remove_zero_columns(df).head().copy()
-            
+
             # Show only the date part in preview (remove 00:00:00)
             for col in ["month", "date"]:
                 if col in preview_df.columns:
@@ -238,7 +247,7 @@ def upload_screen(selected_table):
             # Apply Indian Rupee formatting for currency tables
             if selected_table in ["branch_wise_monthly_target", "date_branch_wise_target"]:
                 preview_df = apply_currency_format(preview_df)
-                
+
             preview_df = preview_df.rename(columns=format_column)
             st.dataframe(preview_df, width="stretch")
 

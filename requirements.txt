@@ -1,10 +1,8 @@
-streamlit
-pandas
-numpy
-openpyxl       
-python-magic    
-clickhouse-connect  
-sqlalchemy          
-psycopg2-binary     
-pyodbc              
-extra_streamlit_components
+# Runtime dependencies (pinned to the versions verified with the original app)
+streamlit==1.56.0
+pandas==3.0.2
+numpy==2.4.4
+openpyxl==3.1.5
+clickhouse-connect==0.15.1
+extra-streamlit-components==0.1.81
+requests==2.33.1

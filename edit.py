@@ -1,21 +1,22 @@
-import streamlit as st
+import logging
+from datetime import date, datetime
+
 import pandas as pd
-from datetime import datetime, date
+import streamlit as st
+
 from db import (
-    fetch_data,
-    get_all_filter_values,
-    insert_dataframe,
-    execute_query,
-    log_execution_time,
-    format_sql_values,
-    format_column,
     apply_currency_format,
     clean_dataframe_for_db,
-    log_audit_action
+    execute_query,
+    fetch_data,
+    format_column,
+    get_all_filter_values,
+    insert_dataframe,
+    log_audit_action,
+    log_execution_time,
 )
-from upload import generate_daily_targets_from_monthly
 from style_utils import inject_minimalist_theme, render_header
-import logging
+from upload import generate_daily_targets_from_monthly
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,7 @@ def edit_screen(selected_table):
     inject_minimalist_theme()
     display_name = selected_table.replace("_", " ").title()
     col_edit, col_upload = render_header(title=f"Editing: {display_name}", hide_upload=True)
-    
+
     with col_edit:
         # Realign the Back button to the header area
         if st.button("⬅️ Back", width="stretch"):
@@ -76,7 +77,7 @@ def edit_screen(selected_table):
         "brand_wise_monthly_target": ["month", "branch_name", "series_group", "item_code", "item_name", "pack_name"]
     }
     filter_cols = TABLE_FILTERS.get(selected_table, [])
-    
+
     for col in filter_cols:
         w_key = f"ed_filter_{col}_{selected_table}"
         if w_key in st.session_state:
@@ -100,7 +101,7 @@ def edit_screen(selected_table):
                 prev_dates = st.session_state.edit_temp_filters.get(col, [])
                 d1_val = prev_dates[0] if isinstance(prev_dates, (list, tuple)) and len(prev_dates) >= 1 else None
                 d2_val = prev_dates[1] if isinstance(prev_dates, (list, tuple)) and len(prev_dates) >= 2 else None
-                
+
                 st.sidebar.caption("📅 Select Date Range")
                 selected = st.sidebar.date_input(
                     "Range",
@@ -142,7 +143,7 @@ def edit_screen(selected_table):
         else:
             logger.info(f"Loading filtered records for editing in {selected_table}: {st.session_state.edit_temp_filters}")
             df = fetch_data(selected_table, filters=st.session_state.edit_temp_filters, limit=200)
-    
+
     # Update applied_filters for Save logic
     applied_filters = st.session_state.edit_temp_filters
 
@@ -176,10 +177,10 @@ def edit_screen(selected_table):
         st.info("💡 **To save data**, first edit any cell in the table below.")
     # We use column_config to show nice labels while keeping technical names for the code
     editor_config = {col: st.column_config.Column(label=format_column(col)) for col in display_df.columns}
-    
+
     # Use a dynamic key to force the editor to reset whenever we save or change tables
     editor_key = f"editor_{selected_table}_{st.session_state.editor_version}"
-    
+
     edited_df = st.data_editor(
         display_df,
         width="stretch",
@@ -200,14 +201,14 @@ def edit_screen(selected_table):
     # We clean both DFs to absolute values to ignore formatting differences
     base_orig = clean_dataframe_for_db(original_df.copy())
     base_edit = clean_dataframe_for_db(edited_df.copy())
-    
+
     # Check for value differences ignoring types/formatting
     # Check for value differences ignoring types/formatting/index-labels
     has_changed_values = False
     if base_edit.shape == base_orig.shape:
         # We compare values directly to ignore index label mismatches
         has_changed_values = not (base_edit.astype(str).values == base_orig.astype(str).values).all()
-        
+
         if has_changed_values:
             # DETECTIVE MODE: Find exactly which cell is triggering the button
             # We use a clean re-indexed comparison for the diff tracker
@@ -237,9 +238,9 @@ def edit_screen(selected_table):
         # We normalize everything cell-by-cell to stripped uppercase strings
         norm_edit = base_edit.map(lambda x: str(x).strip().upper())
         norm_orig = base_orig.map(lambda x: str(x).strip().upper())
-        
+
         real_new_change = not norm_edit.equals(norm_orig)
-        
+
         if real_new_change:
             st.session_state.just_saved = False
             # The code below will now execute for the new change
@@ -253,18 +254,18 @@ def edit_screen(selected_table):
     # LIVE PREVIEW
     # -------------------------------
     if has_changed and not st.session_state.just_saved:
-        
+
         # Robust diff detection using string versions
         conf_df = edited_df.copy()
-        
+
         # Enforce exact label parity to prevent Pandas ValueError on strict comparisons
         # Streamlit sometimes returns slightly modified internal index types (Int64 vs RangeIndex)
         if conf_df.shape == original_df.shape:
             conf_df.index = original_df.index
             conf_df.columns = original_df.columns
-            
+
         diff_mask = (conf_df.astype(str) != original_df.astype(str))
-        
+
         # Filter rows that have at least one change
         changed_mask = diff_mask.any(axis=1)
         changed_rows = conf_df[changed_mask]
@@ -304,12 +305,12 @@ def edit_screen(selected_table):
                 # -------------------------------
                 # Use the live edited_df directly from the data_editor
                 edited_df_full = edited_df.copy()
-                
+
                 # Prevent Pandas ValueError by strictly aligning the dynamically returned frame
                 if edited_df_full.shape == original_df.shape:
                     edited_df_full.index = original_df.index
                     edited_df_full.columns = original_df.columns
-                
+
                 diff_mask = (edited_df_full.astype(str) != original_df.astype(str)).any(axis=1)
                 rows_to_update = edited_df_full[diff_mask]
 
@@ -327,9 +328,9 @@ def edit_screen(selected_table):
                 # -------------------------------
                 # SAVE CHANGES (Handling Identity Changes)
                 # -------------------------------
-                # If the user changed a "Key" column (Month, Branch, Series), 
-                # we must deactivate the old identity manually. 
-                
+                # If the user changed a "Key" column (Month, Branch, Series),
+                # we must deactivate the old identity manually.
+
                 # TABLE_FILTERS is defined at the top of the function
                 key_cols_map = {
                     "branch_wise_monthly_target": ["month", "branch_name", "series_group"],
@@ -338,17 +339,17 @@ def edit_screen(selected_table):
                 }
                 curr_keys = key_cols_map.get(selected_table, [])
                 keys_to_kill = []
-                
+
                 for idx, row in rows_to_update.iterrows():
                     orig_row = original_df.loc[idx]
-                    
+
                     # Check if any key column was changed
                     key_changed = False
                     for c in curr_keys:
                         if str(row[c]).strip().upper() != str(orig_row[c]).strip().upper():
                             key_changed = True
                             break
-                    
+
                     if key_changed:
                         # Build a tuple of the OLD keys to deactivate
                         val_parts = []
@@ -397,7 +398,7 @@ def edit_screen(selected_table):
 
                             # Deactivate old daily targets if key columns changed
                             if keys_to_kill:
-                                for idx, row in rows_to_update.iterrows():
+                                for idx in rows_to_update.index:
                                     orig_row = original_df.loc[idx]
                                     orig_m = pd.to_datetime(orig_row["month"])
                                     orig_b = str(orig_row["branch_name"]).replace("'", "''")
@@ -427,7 +428,7 @@ def edit_screen(selected_table):
                         except Exception as ex_sync:
                             logger.error(f"Error synchronizing daily targets: {ex_sync}")
                             msg = f"{msg} | Warning: date_branch_wise_target sync failed ({ex_sync})"
-                    
+
                     st.success(f"✅ {msg}")
 
                     # TOTAL STATE WIPE: This ensures the UI resets to a clean slate
@@ -436,11 +437,11 @@ def edit_screen(selected_table):
                     st.session_state.edit_original_df = None
                     st.session_state.edit_applied_filters = {}
                     st.session_state.edit_do_confirm = False
-                    
+
                     # Set flag to hide buttons and update table identity
                     st.session_state.just_saved = True
                     st.session_state.editor_version += 1
-                    
+
                     # Force streamlit to forget all old data
                     st.cache_data.clear()
 

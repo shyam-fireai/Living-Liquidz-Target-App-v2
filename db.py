@@ -1,11 +1,12 @@
-import clickhouse_connect
-import json
-import pandas as pd
-from datetime import datetime
-import streamlit as st
-import time
 import functools
+import json
 import logging
+import time
+from datetime import datetime
+
+import clickhouse_connect
+import pandas as pd
+import streamlit as st
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ def log_execution_time(func):
 def format_sql_values(values):
     if not values:
         return ""
-    
+
     formatted = []
     for v in values:
         if isinstance(v, (int, float)):
@@ -39,7 +40,7 @@ def format_sql_values(values):
         else:
             # Wrap strings and dates in quotes
             formatted.append(f"'{v}'")
-            
+
     return ", ".join(formatted)
 
 
@@ -83,7 +84,7 @@ TABLE_SCHEMAS = {
 def get_client():
     logger.info("Initializing ClickHouse client...")
     try:
-        with open('secrets.json', 'r') as f:
+        with open('secrets.json') as f:
             creds = json.load(f)
         conf = creds['data_clickhouse']
         client = clickhouse_connect.get_client(
@@ -187,7 +188,7 @@ def get_all_filter_values(table, current_selections=None):
     for target_col in cols:
         # Build mask for ALL OTHER columns
         mask = pd.Series(True, index=index_df.index)
-        
+
         if current_selections:
             for col, vals in current_selections.items():
                 if col != target_col and vals:
@@ -206,7 +207,7 @@ def get_all_filter_values(table, current_selections=None):
                     # Handle Multiselect
                     elif isinstance(vals, (list, tuple)):
                         mask &= index_df[col].astype(str).isin([str(v) for v in vals])
-        
+
         # Extract unique values from masked dataframe
         unique_vals = index_df.loc[mask, target_col].unique().tolist()
         result_dict[target_col] = sorted([v for v in unique_vals if v is not None])
@@ -219,7 +220,7 @@ def clean_dataframe_for_db(df):
     df = df.copy()
     # Identify columns that should be strings to avoid numpy numeric type issues
     string_cols = ["branch_name", "series_group", "item_code", "item_name", "pack_name", "series"]
-    
+
     for col in df.columns:
         if col in string_cols:
             # Force to string, uppercase, and fill nulls with empty string
@@ -252,7 +253,7 @@ def insert_dataframe(table, df):
         # DYNAMIC COLUMN DETECTION & TYPE ENFORCEMENT
         desc = client.query(f"DESCRIBE {table}").result_rows
         db_cols_meta = {row[0]: row[1] for row in desc}
-        
+
         # Apply robust cleaning
         df = clean_dataframe_for_db(df)
 
@@ -279,7 +280,7 @@ def insert_dataframe(table, df):
 
         logger.info(f"Inserting into {table} with columns: {final_cols}")
         client.insert_df(table, df)
-        
+
         logger.info(f"Successfully inserted {len(df)} records into {table}")
         return True, f"{len(df)} records updated successfully"
 
@@ -311,7 +312,7 @@ def remove_zero_columns(df):
         "month", "date", "branch_name", "series_group", "series",
         "item_code", "item_name", "pack_name"
     ]
-    
+
     # Identify non-protected columns
     other_cols = [c for c in df.columns if c not in protected_cols]
     if not other_cols:
@@ -323,7 +324,7 @@ def remove_zero_columns(df):
 
     # Build final column list
     cols_to_keep = [c for c in df.columns if c in protected_cols or c in non_zero_cols]
-    
+
     return df[cols_to_keep]
 
 
@@ -331,12 +332,13 @@ def format_indian_number(x, show_rupee=True):
     try:
         if pd.isna(x) or x == "":
             return "0.00"
-        
+
         # Clean any existing formatting first to avoid double formatting
         val = str(x).replace("₹", "").replace(",", "")
         x_float = float(val)
-        
-        s = f"{x_float:.2f}"
+
+        sign = "-" if x_float < 0 else ""
+        s = f"{abs(x_float):.2f}"
         parts = s.split(".")
         num = parts[0]
         dec = parts[1]
@@ -350,7 +352,7 @@ def format_indian_number(x, show_rupee=True):
             num = rest + "," + last3
 
         prefix = "₹" if show_rupee else ""
-        return f"{prefix}{num}.{dec}"
+        return f"{prefix}{sign}{num}.{dec}"
     except Exception:
         return x
 
@@ -369,8 +371,9 @@ def apply_currency_format(df):
 # -------------------------------
 def json_serial(obj):
     """JSON serializer for objects not serializable by default json code"""
-    import pandas as pd
     from datetime import date, datetime
+
+    import pandas as pd
     if isinstance(obj, (datetime, date, pd.Timestamp)):
         return obj.isoformat()
     return str(obj)
@@ -379,11 +382,11 @@ def log_audit_action(action_type, target_table=None, record_count=0, before_stat
     logger.info(f"Recording Audit Action: {action_type} for {target_table or 'Global'}")
     try:
         client = get_client()
-        
+
         # Assign persistent session ID
         if "audit_session_id" not in st.session_state:
             st.session_state.audit_session_id = "Session_" + str(int(time.time() * 1000))
-        
+
         # Resolve user email: passed argument > session_state > cookies > fallback
         if not user_email:
             user_email = st.session_state.get("user_email")
@@ -411,9 +414,9 @@ def log_audit_action(action_type, target_table=None, record_count=0, before_stat
             "error_message": error_message or "",
             "metadata": json.dumps(metadata, default=json_serial) if metadata else ""
         }
-        
+
         query = """
-            INSERT INTO target_system_audit_logs 
+            INSERT INTO target_system_audit_logs
             (session_id, user_email, action_type, target_table, record_count, before_state, after_state, device_info, ip_address, error_message, metadata)
             VALUES
             ({session_id:String}, {user_email:String}, {action_type:String}, {target_table:String}, {record_count:Int32}, {before_state:String}, {after_state:String}, {device_info:String}, {ip_address:String}, {error_message:String}, {metadata:String})
@@ -421,6 +424,6 @@ def log_audit_action(action_type, target_table=None, record_count=0, before_stat
         # clickhouse-connect parameterization syntax
         client.command(query, parameters=data)
         logger.info(f"Audit log entry created for {action_type}")
-        
+
     except Exception as e:
         logger.error(f"AUDIT LOG FAILED: {str(e)}")

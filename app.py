@@ -1,10 +1,18 @@
-import streamlit as st
-import pandas as pd
-import time
-from datetime import datetime
-from db import fetch_data, insert_dataframe, get_all_filter_values, log_execution_time, TABLE_SCHEMAS, format_column, remove_zero_columns, apply_currency_format
-from style_utils import inject_minimalist_theme, render_header
 import logging
+import time
+
+import pandas as pd
+import streamlit as st
+
+from db import (
+    TABLE_SCHEMAS,
+    apply_currency_format,
+    fetch_data,
+    format_column,
+    get_all_filter_values,
+    remove_zero_columns,
+)
+from style_utils import inject_minimalist_theme, render_header
 
 # Initialize logger for app.py
 logging.basicConfig(level=logging.INFO)
@@ -19,7 +27,8 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-from auth import require_login
+from auth import require_login  # noqa: E402 - must follow st.set_page_config
+
 if not require_login():
     st.stop()
 
@@ -182,7 +191,7 @@ for col in filters_config:
         prev_dates = st.session_state.temp_filters.get(col, [])
         d1_val = prev_dates[0] if isinstance(prev_dates, (list, tuple)) and len(prev_dates) >= 1 else None
         d2_val = prev_dates[1] if isinstance(prev_dates, (list, tuple)) and len(prev_dates) >= 2 else None
-        
+
         st.sidebar.caption("📅 Select Date Range")
         selected = st.sidebar.date_input(
             "Range",
@@ -212,17 +221,17 @@ if st.sidebar.button("🔄 Reset Filters", use_container_width=True):
 # -------------------------------
 with st.spinner(f"Loading {TABLE_CONFIG[selected_table]['name']}..."):
     _dash_start = time.perf_counter()
-    
+
     # Only use filters if they actually contain selections
     active_filters = {k: v for k, v in st.session_state.temp_filters.items() if v}
-    
+
     if active_filters:
         logger.info(f"Fetching filtered data for {selected_table}: {active_filters}")
         df = fetch_data(selected_table, filters=active_filters, limit=200)
     else:
         logger.info(f"Fetching default data for {selected_table}")
         df = fetch_data(selected_table, limit=200)
-    
+
     _dash_end = time.perf_counter()
     logger.info(f"Data load took {_dash_end - _dash_start:.4f} seconds")
 
@@ -237,7 +246,7 @@ df = df.drop(columns=['version', 'updated_at', 'is_active'], errors='ignore')
 # Remove zero/empty columns
 df = remove_zero_columns(df)
 
-# Apply Indian Comma formatting (Lakhs/Crores) 
+# Apply Indian Comma formatting (Lakhs/Crores)
 # Handles both Currency (Values) and Quantities (Qty)
 df = apply_currency_format(df)
 
@@ -249,7 +258,7 @@ for col in ["Date", "Month"]:
     if col in df.columns:
         try:
             df[col] = pd.to_datetime(df[col]).dt.date
-        except:
+        except Exception:
             pass
 
 # -------------------------------
@@ -257,7 +266,7 @@ for col in ["Date", "Month"]:
 # -------------------------------
 # Use native formatting ONLY for columns that are still numeric
 numeric_cols = [
-    c for c in df.columns 
+    c for c in df.columns
     if any(x in c for x in ["Qty", "Value"]) and pd.api.types.is_numeric_dtype(df[c])
 ]
 config = {c: st.column_config.NumberColumn(format="%.2f") for c in numeric_cols}

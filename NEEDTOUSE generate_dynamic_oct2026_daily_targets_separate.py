@@ -1,10 +1,10 @@
 import os
-import sys
 import time
 from datetime import datetime
-import pandas as pd
+
 import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+import pandas as pd
+from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 # Paths
@@ -112,7 +112,7 @@ def main():
     daily_rows_summary = []
     verification_records = []
 
-    for idx, m_row in df_monthly.iterrows():
+    for _, m_row in df_monthly.iterrows():
         b_name = m_row["branch_name"]
         s_group = m_row["series_group"]
 

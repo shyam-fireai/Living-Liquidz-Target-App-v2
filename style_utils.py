@@ -1,16 +1,17 @@
-import streamlit as st
 import logging
+
+import streamlit as st
 
 logger = logging.getLogger(__name__)
 
 def inject_minimalist_theme():
     """Injects high-quality CSS for an Absolute Top Toolbar style."""
-    
+
     premium_css = """
     <style>
         /* Global Background & Font */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        
+
         html, body, [data-testid="stAppViewContainer"] {
             font-family: 'Inter', sans-serif;
             background-color: #FFFFFF !important;
@@ -21,11 +22,11 @@ def inject_minimalist_theme():
             background-color: rgba(255, 255, 255, 0) !important;
             color: #1e293b !important;
         }
-        
+
         [data-testid="stDecoration"] {
             display: none !important;
         }
-        
+
         /* Ensure the sidebar toggle button is visible and matches our theme */
         [data-testid="stHeader"] button {
             color: #1e293b !important;
@@ -54,7 +55,7 @@ def inject_minimalist_theme():
             margin-bottom: 2rem !important;
             display: flex !important;
             align-items: center !important;
-            box-shadow: none !important; 
+            box-shadow: none !important;
             border-radius: 0 !important; /* Un-box the top header */
         }
 
@@ -94,7 +95,7 @@ def inject_minimalist_theme():
             align-items: center !important;
             gap: 8px !important;
         }
-        
+
         div.stButton > button div[data-testid="stMarkdownContainer"] {
             display: flex !important;
             flex-direction: row !important;
@@ -122,7 +123,7 @@ def inject_minimalist_theme():
         [data-testid="stPopover"] button:hover {
             background: #E5E7EB !important;
         }
-        
+
         [data-testid="stPopover"] button div[data-testid="stMarkdownContainer"] {
             width: 100% !important;
             height: 100% !important;
@@ -134,7 +135,7 @@ def inject_minimalist_theme():
         }
 
         /* 5. RESPONSIVENESS ENGINE (Media Queries) */
-        
+
         /* Tablet & Mobile Tweaks */
         @media (max-width: 1024px) {
             .block-container {
@@ -180,7 +181,7 @@ def inject_minimalist_theme():
             [data-testid="column"]:has(div[style*="height: 0px"]) {
                 display: none !important;
             }
-            
+
             /* Target columns that contain no visible Streamlit elements (spacers) */
             [data-testid="column"]:empty {
                 display: none !important;
@@ -226,7 +227,7 @@ def inject_minimalist_theme():
 def render_header(title="Dashboard", hide_upload=False):
     """Renders a single-row sticky toolbar at absolute zero-gap top."""
     logger.info(f"Rendering header toolbar for: {title}")
-    
+
     if hide_upload:
         # Pushes single action col to far right next to profile
         col_brand, col_spacer, col_edit, col_profile = st.columns([3, 5, 1.4, 0.6], vertical_alignment="center")
@@ -234,20 +235,20 @@ def render_header(title="Dashboard", hide_upload=False):
     else:
         # Grid layout for the toolbar, slightly larger action cols to avoid text wrapping
         col_brand, col_spacer, col_edit, col_upload, col_profile = st.columns([3, 3.6, 1.4, 1.4, 0.6], vertical_alignment="center")
-    
+
     with col_brand:
         st.markdown(f"""
             <div style="display: flex; align-items: center; gap: 12px;">
-                <button 
+                <button
                     onclick="window.parent.document.querySelector('button[aria-label=\\'Open sidebar\\'], button[data-testid=\\'stSidebarCollapseButton\\']').click();"
                     style="
-                        background: none; 
-                        border: none; 
-                        cursor: pointer; 
-                        font-size: 1.2rem; 
-                        padding: 0; 
-                        margin: 0; 
-                        display: flex; 
+                        background: none;
+                        border: none;
+                        cursor: pointer;
+                        font-size: 1.2rem;
+                        padding: 0;
+                        margin: 0;
+                        display: flex;
                         align-items: center;
                         color: #1e293b;
                     "
@@ -269,23 +270,23 @@ def render_header(title="Dashboard", hide_upload=False):
                 }}
             </style>
         """, unsafe_allow_html=True)
-        
+
     with col_profile:
         with st.popover("👤"):
             from auth import get_cookie_manager, logout
-            
+
             user_name = st.session_state.get("username", "Admin User")
             user_email = st.session_state.get("user_email", "admin@livingliquid.com")
-            
+
             # Show actual user details if we have profile data
             if "auth_profile" in st.session_state:
                 p = st.session_state.auth_profile
                 user_name = f"{p.get('first_name', '')} {p.get('last_name', '')}".strip() or user_name
-            
+
             st.markdown(f"**{user_name}**")
             st.caption(user_email)
             st.divider()
-            
+
             if st.button("Logout", use_container_width=True):
                 logger.info("Logout button clicked in profile popover.")
                 cm = get_cookie_manager()
