@@ -8,8 +8,8 @@ import extra_streamlit_components as stx
 import requests
 import streamlit as st
 
-from config import get_secret
-from services.session import SESSION_SECONDS, create_token, token_expiry, verify_token
+from config import get_allowed_emails, get_secret, session_seconds
+from services.session import create_token, token_expiry, verify_token
 
 logger = logging.getLogger(__name__)
 
@@ -21,10 +21,7 @@ class AuthService:
     def __init__(self):
         self.base_url = get_secret("FIREAI_BASE_URL")
         self.api_key = get_secret("FIREAI_API_KEY")
-        raw_allowed = get_secret("ALLOWED_EMAILS", [])
-        if isinstance(raw_allowed, str):
-            raw_allowed = raw_allowed.split(",")
-        self.allowed_emails = [e.strip().lower() for e in raw_allowed if e.strip()]
+        self.allowed_emails = get_allowed_emails()
 
     def login(self, email, password):
         # Restrict to allowed emails (loaded from ENV/secrets)
@@ -152,7 +149,7 @@ def show_login_page():
                 st.session_state.username = username_or_email
                 st.session_state.user_email = username_or_email
                 log_to_audit("LOGIN", user_email=username_or_email)
-                expires_at = int(time.time()) + SESSION_SECONDS
+                expires_at = int(time.time()) + session_seconds()
                 token = create_token(username_or_email, expires_at)
 
                 user_data = response_data.get("user", {})
@@ -174,7 +171,7 @@ def show_login_page():
                 if "logout_audited" in st.session_state:
                     del st.session_state.logout_audited
 
-                # 5. Set cookies (1-Hour Secure Persistence)
+                # 5. Set cookies (lifetime = SESSION_HOURS, default 1 hour)
                 # This ensures the session handles Ctrl+R but stays secure
                 expiry = datetime.datetime.fromtimestamp(expires_at)
 
@@ -185,7 +182,7 @@ def show_login_page():
                 # Set the Sentinel Switch
                 cookie_manager.set("auth_session_active", "1", key="set_asa", expires_at=expiry)
 
-                logger.info(f"User {username_or_email} logged in successfully with 1-hr expiry.")
+                logger.info("User %s logged in", username_or_email)
                 # Force a cache clear to ensure the first dashboard load is live and correct
                 st.cache_data.clear()
                 st.rerun()

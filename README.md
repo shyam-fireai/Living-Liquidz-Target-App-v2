@@ -1,0 +1,164 @@
+# Living Liquidz Target App
+
+Internal Streamlit app for viewing, uploading and editing sales targets stored in ClickHouse.
+
+- **Branch Wise Monthly Target**: monthly targets per branch and series. Saving these also
+  regenerates the daily targets (see [Daily split rule](#daily-split-rule)).
+- **Brand Wise Monthly Target**: monthly quantity targets per branch, series and item.
+- **Date & Branch Wise Target**: daily targets. Read-only in the UI; generated from the monthly table.
+
+Users log in with their FireAI account; only e-mails in `ALLOWED_EMAILS` are admitted. Every login,
+upload, edit and error is written to the `target_system_audit_logs` table.
+
+---
+
+## Quick start (deployment)
+
+```bash
+# 1. Create the tables once (skip if they already exist)
+clickhouse-client --host <host> --secure --user <admin> --password --database living_liquid_mv \
+  --multiquery < db/schema.sql
+
+# 2. Configure: copy .env.example to .env and fill it in (never commit .env)
+cp .env.example .env
+
+# 3. Build and run
+docker build -t living-liquidz-targets .
+docker run -d --name living-liquidz-targets --restart unless-stopped \
+  -p 8501:8501 --env-file .env living-liquidz-targets
+```
+
+The app listens on port **8501**. Health check: `GET /_stcore/health` returns `ok`.
+
+If configuration is missing or invalid, the app starts but shows a page listing exactly which
+settings to fix (values are never displayed), and the same list is logged at `ERROR` level.
+
+---
+
+## Configuration
+
+Every setting can be provided as an **environment variable** (recommended on servers) or in a
+`secrets.json` file in the project directory (convenient locally; template: `secrets.example.json`).
+Environment variables take precedence. `LL_SECRETS_PATH` can point to a `secrets.json` elsewhere.
+
+| Environment variable | secrets.json key | Required | Description |
+|---|---|---|---|
+| `CLICKHOUSE_HOST` | `data_clickhouse.host` | yes | ClickHouse host |
+| `CLICKHOUSE_PORT` | `data_clickhouse.port` | no (8123) | HTTP(S) port, usually 8443 with TLS |
+| `CLICKHOUSE_USER` | `data_clickhouse.username` | yes | App database user (see [privileges](#database)) |
+| `CLICKHOUSE_PASSWORD` | `data_clickhouse.password` | no | Password for that user |
+| `CLICKHOUSE_DATABASE` | `data_clickhouse.database` | yes | e.g. `living_liquid_mv` |
+| `CLICKHOUSE_SECURE` | `data_clickhouse.secure` | no (false) | `true` to use TLS |
+| `FIREAI_BASE_URL` | `FIREAI_BASE_URL` | yes | FireAI auth API base URL |
+| `FIREAI_API_KEY` | `FIREAI_API_KEY` | yes | FireAI API key |
+| `ALLOWED_EMAILS` | `ALLOWED_EMAILS` | yes | Comma-separated e-mails allowed to log in |
+| `COOKIE_SECRET` | `COOKIE_SECRET` | yes | ≥ 32 random characters, **unique per environment**. Signs login sessions; changing it logs everyone out. Generate: `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `SESSION_HOURS` | `SESSION_HOURS` | no (1) | How long a login lasts |
+
+`auth_clickhouse` in older `secrets.json` files is not used by the app.
+
+---
+
+## Database
+
+Schema: [`db/schema.sql`](db/schema.sql). Target tables use `ReplacingMergeTree(version)`:
+
+- Saving a row **inserts a new version** (`version` = Unix time); reads use `FINAL`, so the newest
+  version of each key wins. There are no in-place updates for normal saves.
+- Rows are never deleted by the app. When an edit changes a row's key (month / branch / series ...),
+  the old key is retired with `ALTER TABLE ... UPDATE is_active = 0` (run with `mutations_sync = 1`).
+  All reads filter `is_active = 1`.
+- Values are `Decimal(10, 2)`: maximum 99,999,999.99 per cell.
+
+Privileges needed by the app user (`CLICKHOUSE_USER`), least privilege:
+
+```sql
+GRANT SELECT, INSERT, ALTER UPDATE ON living_liquid_mv.branch_wise_monthly_target TO <app_user>;
+GRANT SELECT, INSERT, ALTER UPDATE ON living_liquid_mv.brand_wise_monthly_target  TO <app_user>;
+GRANT SELECT, INSERT, ALTER UPDATE ON living_liquid_mv.date_branch_wise_target    TO <app_user>;
+GRANT SELECT, INSERT              ON living_liquid_mv.target_system_audit_logs    TO <app_user>;
+```
+
+---
+
+## Daily split rule
+
+When Branch Wise Monthly Target rows are uploaded or edited, each monthly `target_value1..5` is
+split over the days of that month: **Mon–Thu weight 3, Fri–Sun weight 5**. Each day is rounded to
+2 decimals and the last day absorbs the rounding remainder, so the daily values always add up
+**exactly** to the monthly value. Daily incentives are 0. Implemented in `services/targets.py`
+(`month_weights`, `distribute_target`) and covered by tests.
+
+Save order (`services.targets.save_targets`), chosen so a failure never loses data:
+1. insert the monthly rows; on failure nothing else happens;
+2. regenerate and insert the daily rows; on failure the user is told to save again;
+3. retire old keys changed by an edit (skipping keys that the new rows re-use).
+
+---
+
+## Project layout
+
+```
+app.py              entry point: page config, settings check, login, table picker, routing
+config.py           table metadata (single source of truth) + settings loading/validation
+auth.py             FireAI login, session cookies, logout
+db/
+  client.py         ClickHouse client (one per process)
+  repository.py     all queries; values always passed as ClickHouse parameters
+  audit.py          writes to target_system_audit_logs (never raises)
+  schema.sql        table definitions
+services/
+  targets.py        daily split + save_targets (business rules)
+  validation.py     CSV reading and input normalisation
+  session.py        HMAC-signed session tokens
+ui/                 theme CSS, header, sidebar filters, number formatting
+views/              dashboard.py, edit.py, upload.py (screens)
+scripts/            one-off offline tools (not part of the running app)
+tests/              pytest unit tests
+```
+
+Security notes: SQL values are always bound parameters, and table/column names come only from
+`config.TABLES`. Session cookies carry `"<expiry>.<HMAC-SHA256(email|expiry)>"` and are verified on
+every restore. Secrets are never logged or baked into the Docker image (`.dockerignore`).
+
+---
+
+## Operations
+
+- **Logs**: stdout, format `time LEVEL module: message`.
+- **Audit trail**: `target_system_audit_logs` (who, what, when, before/after values for edits).
+- **Scaling**: Streamlit keeps a websocket per browser tab. Behind a load balancer, enable
+  **sticky sessions** and **websocket upgrades**. All replicas must share the same `COOKIE_SECRET`.
+- **Reverse proxy** (nginx example):
+
+  ```nginx
+  location / {
+      proxy_pass http://127.0.0.1:8501;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host $host;
+      proxy_read_timeout 86400;
+  }
+  ```
+  Serve the app over HTTPS only.
+
+---
+
+## Development
+
+```bash
+python -m venv venv
+venv\Scripts\activate            # Windows  (Linux/macOS: source venv/bin/activate)
+pip install -r requirements-dev.txt
+cp secrets.example.json secrets.json   # then fill it in
+streamlit run app.py
+```
+
+Checks (also run by GitHub Actions on every push, see `.github/workflows/ci.yml`):
+
+```bash
+ruff check . && ruff format --check . && pytest -q
+```
+
+Dependencies are pinned in `requirements.txt`; upgrade deliberately and re-run the tests.

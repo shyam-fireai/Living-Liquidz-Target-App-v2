@@ -4,12 +4,21 @@ import logging
 
 import streamlit as st
 
-from config import TABLES
+from config import TABLES, validate_settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="Living Liquid Dashboard", layout="wide", initial_sidebar_state="expanded")
+
+# Fail fast with a clear message if the deployment is missing configuration.
+_problems = validate_settings()
+if _problems:
+    for p in _problems:
+        logger.error("Configuration problem: %s", p)
+    st.error("**The application is not configured correctly.** Ask the administrator to fix:")
+    st.markdown("\n".join(f"- {p}" for p in _problems))
+    st.stop()
 
 from auth import require_login  # noqa: E402 - must follow st.set_page_config
 from ui.theme import inject_minimalist_theme  # noqa: E402

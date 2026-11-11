@@ -5,22 +5,21 @@ import logging
 import clickhouse_connect
 import streamlit as st
 
-from config import load_secrets
+from config import get_db_settings
 
 logger = logging.getLogger(__name__)
 
 
 @st.cache_resource
 def get_client():
-    conf = load_secrets()["data_clickhouse"]
+    conf = get_db_settings()
     client = clickhouse_connect.get_client(
         host=conf["host"],
         port=conf["port"],
         username=conf["username"],
         password=conf["password"],
         database=conf["database"],
-        # Local Docker: "secure": false in secrets.json; live server: "secure": true
-        secure=bool(conf.get("secure", False)),
+        secure=conf["secure"],  # true for TLS (live server), false for local Docker
         connect_timeout=30,
         send_receive_timeout=60,
     )

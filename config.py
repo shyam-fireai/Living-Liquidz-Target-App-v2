@@ -91,17 +91,81 @@ def get_table(name: str) -> TableConfig:
         raise ValueError(f"Unknown table: {name!r}") from None
 
 
+# -------------------------------
+# SETTINGS
+# Every setting can come from an environment variable (preferred on servers) or from
+# secrets.json (convenient locally). Environment variables win. See README "Configuration".
+# -------------------------------
 @lru_cache(maxsize=1)
 def load_secrets() -> dict:
-    """Load secrets.json once. Missing file -> empty dict (env vars may still supply values)."""
+    """Load secrets.json once. Missing file -> empty dict (env vars may supply everything)."""
     try:
         with open(SECRETS_PATH, encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
-        logger.warning("Secrets file not found at %s", SECRETS_PATH)
+        logger.info("No secrets file at %s; using environment variables only", SECRETS_PATH)
         return {}
 
 
 def get_secret(key: str, default=None):
     """Environment variable wins over secrets.json."""
     return os.getenv(key) or load_secrets().get(key, default)
+
+
+# env var -> key inside secrets.json "data_clickhouse"
+_DB_ENV = {
+    "CLICKHOUSE_HOST": "host",
+    "CLICKHOUSE_PORT": "port",
+    "CLICKHOUSE_USER": "username",
+    "CLICKHOUSE_PASSWORD": "password",
+    "CLICKHOUSE_DATABASE": "database",
+    "CLICKHOUSE_SECURE": "secure",
+}
+
+
+def _as_bool(value) -> bool:
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
+def get_db_settings() -> dict:
+    conf = dict(load_secrets().get("data_clickhouse") or {})
+    for env, key in _DB_ENV.items():
+        if os.getenv(env) is not None:
+            conf[key] = os.getenv(env)
+    conf.setdefault("port", 8123)
+    conf["port"] = int(conf["port"])
+    conf["secure"] = _as_bool(conf.get("secure", False))
+    conf.setdefault("password", "")
+    return conf
+
+
+def get_allowed_emails() -> list[str]:
+    raw = get_secret("ALLOWED_EMAILS", [])
+    if isinstance(raw, str):
+        raw = raw.split(",")
+    return [e.strip().lower() for e in raw if e and e.strip()]
+
+
+def session_seconds() -> int:
+    return int(float(get_secret("SESSION_HOURS", 1)) * 3600)
+
+
+def validate_settings() -> list[str]:
+    """Human-readable problems with the configuration (never includes secret values)."""
+    problems = []
+    db = get_db_settings()
+    for env, key in _DB_ENV.items():
+        if key not in ("password", "secure", "port") and not db.get(key):
+            problems.append(f"Database setting missing: {env} (or data_clickhouse.{key} in secrets.json)")
+    for key in ("FIREAI_BASE_URL", "FIREAI_API_KEY"):
+        if not get_secret(key):
+            problems.append(f"Login service setting missing: {key}")
+    if not get_allowed_emails():
+        problems.append("ALLOWED_EMAILS is empty: nobody would be able to log in")
+    if len(str(get_secret("COOKIE_SECRET") or "")) < 32:
+        problems.append("COOKIE_SECRET missing or shorter than 32 characters (see README)")
+    try:
+        session_seconds()
+    except ValueError:
+        problems.append("SESSION_HOURS must be a number")
+    return problems

@@ -7,28 +7,19 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import logging
-import secrets
 import time
 from functools import lru_cache
 
-from config import get_secret
-
-logger = logging.getLogger(__name__)
-
-SESSION_SECONDS = 60 * 60  # 1 hour
+from config import get_secret, session_seconds
 
 
 @lru_cache(maxsize=1)
 def _secret() -> bytes:
     value = get_secret("COOKIE_SECRET")
     if not value:
-        logger.warning(
-            "COOKIE_SECRET is not set in secrets.json/env - using a random per-process secret; "
-            "users will have to log in again after every server restart."
-        )
-        value = secrets.token_hex(32)
-    return value.encode()
+        # app.py validates settings at startup, so this only triggers if that check is bypassed.
+        raise RuntimeError("COOKIE_SECRET is not configured")
+    return str(value).encode()
 
 
 def _sign(email: str, expires_at: int, key: bytes) -> str:
@@ -37,7 +28,7 @@ def _sign(email: str, expires_at: int, key: bytes) -> str:
 
 
 def create_token(email: str, expires_at: int | None = None, key: bytes | None = None) -> str:
-    expires_at = int(expires_at if expires_at is not None else time.time() + SESSION_SECONDS)
+    expires_at = int(expires_at if expires_at is not None else time.time() + session_seconds())
     return f"{expires_at}.{_sign(email, expires_at, key or _secret())}"
 
 
