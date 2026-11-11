@@ -10,14 +10,18 @@ Internal Streamlit app for viewing, uploading and editing sales targets stored i
 What users can do:
 
 - **Dashboard**: summary cards (rows, branches, totals over *all* matching rows), cascading
-  filters with removable chips, "Showing N of M rows" with a row-count picker, and CSV/Excel
-  export of every matching row (the CSV can be edited and uploaded again).
+  filters with removable chips, a paged table ("Showing 201–400 of N", page size 200 / 500 /
+  1,000 / 5,000 / All, Previous / Next; paging is done by ClickHouse), and CSV/Excel export of
+  every matching row (the CSV can be edited and uploaded again).
 - **Upload** (CSV): every row is validated at once (missing values, bad dates, month not the 1st,
   non-numeric/negative/too-large numbers, duplicate keys, unknown branches as warnings), then a
   preview shows new / updated / unchanged rows and the daily split before anything is saved.
   Only rows that change are written.
-- **Edit**: inline editing with key columns locked by default, a highlighted old -> new review,
-  the same validation as uploads, and protection against overwriting another row's key.
+- **Edit**: inline editing (key columns included), a highlighted old -> new review, the same
+  validation as uploads, and protection against overwriting another row's key. Changing a key
+  replaces the old row (and its daily targets) on save.
+- **History**: who uploaded / edited what and when, from the audit log, in IST. Filters by date,
+  action, user and table; selecting an edit shows exactly which cells changed (old -> new).
 
 Users log in with their FireAI account; only e-mails in `ALLOWED_EMAILS` are admitted. Every login,
 upload, edit and error is written to the `target_system_audit_logs` table.
@@ -117,14 +121,19 @@ auth.py             FireAI login, session cookies, logout
 db/
   client.py         ClickHouse client (one per process)
   repository.py     all queries; values always passed as ClickHouse parameters
-  audit.py          writes to target_system_audit_logs (never raises)
+  audit.py          audit log: writes (never raise) and History reads
+  cache.py          per-table cache invalidation (see Operations)
   schema.sql        table definitions
 services/
   targets.py        daily split + save_targets (business rules)
   validation.py     CSV reading and input normalisation
   session.py        HMAC-signed session tokens
+  changes.py        upload preview: new / updated / unchanged
+  edits.py          edit validation (key collisions, replaced keys)
+  history.py        audit entries -> readable summaries, IST times, old/new diffs
+  export.py         CSV / Excel export
 ui/                 theme CSS, header, sidebar filters, number formatting
-views/              dashboard.py, edit.py, upload.py (screens)
+views/              dashboard.py, edit.py, upload.py, history.py (screens)
 scripts/            one-off offline tools (not part of the running app)
 tests/              pytest unit tests
 ```
@@ -138,7 +147,14 @@ every restore. Secrets are never logged or baked into the Docker image (`.docker
 ## Operations
 
 - **Logs**: stdout, format `time LEVEL module: message`.
-- **Audit trail**: `target_system_audit_logs` (who, what, when, before/after values for edits).
+- **Audit trail**: `target_system_audit_logs` (who, what, when, before/after values for edits),
+  shown in the app on the **History** page. Timestamps are stored as DateTime (UTC on the
+  server) and displayed in IST.
+- **Caching**: reads are cached for 60 s (filter lists 5 min). Every write made *through the app*
+  bumps a per-table data version (`db/cache.py`), so the changed table is refreshed immediately
+  for every user of that app process, and other tables stay cached. Changes made *outside* the app
+  (scripts, direct SQL) and, with several replicas, changes made on *another replica* appear
+  after the cache TTL (at most 60 s).
 - **Scaling**: Streamlit keeps a websocket per browser tab. Behind a load balancer, enable
   **sticky sessions** and **websocket upgrades**. All replicas must share the same `COOKIE_SECRET`.
 - **Reverse proxy** (nginx example):

@@ -7,16 +7,13 @@ import streamlit as st
 logger = logging.getLogger(__name__)
 
 
-def render_header(title="Dashboard", hide_upload=False):
-    """Renders a single-row sticky toolbar at absolute zero-gap top."""
+def render_header(title="Dashboard", buttons=2):
+    """Toolbar row: title on the left, `buttons` equal button slots on the right (returned as a list)."""
     logger.debug("Rendering header toolbar for: %s", title)
 
     # User details and Logout live in the sidebar user card (render_user_card), not in the header.
-    if hide_upload:
-        col_brand, _, col_edit = st.columns([3, 5.6, 1.4], vertical_alignment="center")
-        col_upload = None
-    else:
-        col_brand, _, col_edit, col_upload = st.columns([3, 4.2, 1.4, 1.4], vertical_alignment="center")
+    spacer = max(1.0, 7.0 - 1.4 * buttons)
+    col_brand, _, *slots = st.columns([3, spacer] + [1.4] * buttons, vertical_alignment="center")
 
     with col_brand:
         st.markdown(
@@ -56,7 +53,7 @@ def render_header(title="Dashboard", hide_upload=False):
             unsafe_allow_html=True,
         )
 
-    return col_edit, col_upload
+    return slots
 
 
 def show_error(message: str, exc: BaseException | None = None) -> None:

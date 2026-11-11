@@ -2,6 +2,10 @@
 
 import pandas as pd
 
+# Old -> new highlighting used by the Edit review and the History details.
+DIFF_OLD_STYLE = "background-color: #FEE2E2; color: #991B1B"
+DIFF_NEW_STYLE = "background-color: #DCFCE7; color: #166534; font-weight: 600"
+
 RUPEE = "₹"
 
 # Columns always shown even when every value is zero/blank.

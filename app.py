@@ -33,41 +33,46 @@ inject_minimalist_theme()
 st.session_state.setdefault("page", "dashboard")
 st.session_state.setdefault("current_table", None)
 
-# -------------------------------
-# SIDEBAR TABLE SELECT
-# -------------------------------
-st.sidebar.title("\U0001f4c2 Tables")
 page = st.session_state.page
-# Generated tables (e.g. Date & Branch Wise Target) cannot be edited/uploaded directly.
-table_keys = [t for t, cfg in TABLES.items() if page == "dashboard" or cfg.editable]
-labels = [TABLES[t].display_name for t in table_keys]
-current = st.session_state.current_table
-index = table_keys.index(current) if current in table_keys else 0
 
-selected_label = st.sidebar.radio("Select Table", labels, index=index)
-cfg = TABLES[table_keys[labels.index(selected_label)]]
+if page == "history":
+    # History spans all tables: it has its own filters and no table picker.
+    from views.history import history_screen
 
-if current != cfg.name:
-    logger.info("Table switched: %s -> %s", current, cfg.name)
-    st.session_state.upload_done = False
-    st.session_state.upload_msg = ""
-    st.session_state.current_table = cfg.name
-
-# -------------------------------
-# ROUTING
-# -------------------------------
-if page == "edit":
-    from views.edit import edit_screen
-
-    edit_screen(cfg)
-elif page == "upload":
-    from views.upload import upload_screen
-
-    upload_screen(cfg)
+    history_screen()
 else:
-    from views.dashboard import dashboard_screen
+    # -------------------------------
+    # SIDEBAR TABLE SELECT
+    # -------------------------------
+    st.sidebar.title("📂 Tables")
+    # Generated tables (e.g. Date & Branch Wise Target) cannot be edited/uploaded directly.
+    table_keys = [t for t, cfg in TABLES.items() if page == "dashboard" or cfg.editable]
+    labels = [TABLES[t].display_name for t in table_keys]
+    current = st.session_state.current_table
+    index = table_keys.index(current) if current in table_keys else 0
 
-    dashboard_screen(cfg)
+    selected_label = st.sidebar.radio("Select Table", labels, index=index)
+    cfg = TABLES[table_keys[labels.index(selected_label)]]
+
+    if current != cfg.name:
+        logger.info("Table switched: %s -> %s", current, cfg.name)
+        st.session_state.current_table = cfg.name
+
+    # -------------------------------
+    # ROUTING
+    # -------------------------------
+    if page == "edit":
+        from views.edit import edit_screen
+
+        edit_screen(cfg)
+    elif page == "upload":
+        from views.upload import upload_screen
+
+        upload_screen(cfg)
+    else:
+        from views.dashboard import dashboard_screen
+
+        dashboard_screen(cfg)
 
 # Rendered last so it sits at the bottom of the sidebar, below the filters.
 from ui.components import render_user_card  # noqa: E402

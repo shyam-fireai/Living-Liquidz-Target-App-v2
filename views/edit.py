@@ -1,4 +1,4 @@
-"""Edit screen: inline editing with locked keys, a cell-level diff, validation, then save."""
+"""Edit screen: inline editing, a cell-level diff (old -> new), validation, then save."""
 
 import logging
 
@@ -13,12 +13,15 @@ from services.targets import save_targets
 from services.validation import clean_dataframe_for_db
 from ui.components import render_header, show_error
 from ui.filters import render_sidebar_filters
-from ui.formatting import apply_currency_format, format_column, format_indian_number
+from ui.formatting import (
+    DIFF_NEW_STYLE,
+    DIFF_OLD_STYLE,
+    apply_currency_format,
+    format_column,
+    format_indian_number,
+)
 
 logger = logging.getLogger(__name__)
-
-OLD_STYLE = "background-color: #FEE2E2; color: #991B1B"
-NEW_STYLE = "background-color: #DCFCE7; color: #166534; font-weight: 600"
 
 
 def _reset_edit_state(table: str) -> None:
@@ -56,7 +59,7 @@ def _diff_table(cfg: TableConfig, diff: pd.DataFrame):
             "New": [fmt(c, v) for c, v in zip(diff["column"], diff["New"], strict=True)],
         }
     )
-    return view.style.map(lambda _: OLD_STYLE, subset=["Old"]).map(lambda _: NEW_STYLE, subset=["New"])
+    return view.style.map(lambda _: DIFF_OLD_STYLE, subset=["Old"]).map(lambda _: DIFF_NEW_STYLE, subset=["New"])
 
 
 def _save(cfg: TableConfig, check, original_rows: pd.DataFrame, n_cells: int) -> None:
@@ -97,7 +100,7 @@ def edit_screen(cfg: TableConfig) -> None:
     if st.session_state.get("edit_last_table") != table:
         _reset_edit_state(table)
 
-    col_back, _ = render_header(title=f"Editing: {cfg.display_name}", hide_upload=True)
+    (col_back,) = render_header(title=f"Editing: {cfg.display_name}", buttons=1)
     with col_back:
         if st.button("⬅️ Back", width="stretch"):
             st.session_state.page = "dashboard"

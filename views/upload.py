@@ -174,7 +174,7 @@ def _save(cfg: TableConfig, changes, file_name: str) -> None:
 
 def upload_screen(cfg: TableConfig) -> None:
     table = cfg.name
-    col_back, _ = render_header(title=f"Uploading: {cfg.display_name}", hide_upload=True)
+    (col_back,) = render_header(title=f"Uploading: {cfg.display_name}", buttons=1)
     with col_back:
         if st.button("⬅️ Back", width="stretch"):
             st.session_state.page = "dashboard"

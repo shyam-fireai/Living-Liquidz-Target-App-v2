@@ -25,19 +25,22 @@ logger = logging.getLogger(__name__)
 ROW_CHOICES = {"200": 200, "500": 500, "1,000": 1_000, "5,000": 5_000, "All": MAX_EXPORT_ROWS}
 
 
+def _go(page: str) -> None:
+    st.session_state.page = page
+    st.rerun()
+
+
 def _header(cfg: TableConfig) -> None:
-    if not cfg.editable:
-        render_header(title=cfg.display_name, hide_upload=True)
-        return
-    col_edit, col_upload = render_header(title=cfg.display_name)
-    with col_edit:
-        if st.button("\U0001f4dd Edit", width="stretch"):
-            st.session_state.page = "edit"
-            st.rerun()
-    with col_upload:
-        if st.button("\U0001f4e4 Upload", width="stretch"):
-            st.session_state.page = "upload"
-            st.rerun()
+    if not cfg.editable:  # generated tables: no Edit / Upload
+        (col_history,) = render_header(title=cfg.display_name, buttons=1)
+    else:
+        col_edit, col_upload, col_history = render_header(title=cfg.display_name, buttons=3)
+        if col_edit.button("📝 Edit", width="stretch"):
+            _go("edit")
+        if col_upload.button("📤 Upload", width="stretch"):
+            _go("upload")
+    if col_history.button("🕒 History", width="stretch"):
+        _go("history")
 
 
 KPI_CSS = """

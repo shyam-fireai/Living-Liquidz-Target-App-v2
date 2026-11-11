@@ -11,6 +11,7 @@ import pandas as pd
 import streamlit as st
 
 from config import BRANCH_MONTHLY, DATE_BRANCH, DEFAULT_ROW_LIMIT, SYSTEM_COLUMNS, get_table
+from db.cache import _versions, data_version, invalidate  # noqa: F401 - re-exported
 from db.client import get_client
 from services.validation import NULL_TOKENS, clean_dataframe_for_db
 
@@ -19,27 +20,6 @@ logger = logging.getLogger(__name__)
 # Wait for ALTER ... UPDATE mutations to finish on this replica before returning,
 # so the next read (FINAL) already sees the deactivation.
 _MUTATION_SETTINGS = {"mutations_sync": 1}
-
-
-# -------------------------------
-# Per-table cache invalidation
-# -------------------------------
-@st.cache_resource
-def _versions() -> dict[str, int]:
-    """Process-wide data version per table, shared by every user session."""
-    return {}
-
-
-def data_version(table: str) -> int:
-    return _versions().get(table, 0)
-
-
-def invalidate(*tables: str) -> None:
-    """Mark tables as changed: cached reads of *these* tables are refetched (for every user);
-    cached reads of other tables stay. Called by every write below."""
-    versions = _versions()
-    for table in tables:
-        versions[table] = versions.get(table, 0) + 1
 
 
 # -------------------------------
