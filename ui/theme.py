@@ -104,37 +104,6 @@ def inject_minimalist_theme():
             justify-content: center !important;
         }
 
-        /* 4. FIX PROFILE BUTTON TO BE EXACTLY CIRCULAR */
-        [data-testid="stPopover"] button {
-            width: 42px !important;
-            height: 42px !important;
-            min-width: 0 !important; /* Remove Streamlit's default min-width for buttons */
-            border-radius: 50% !important; /* Perfect circle */
-            padding: 0 !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            overflow: hidden !important;
-            font-size: 1.2rem !important; /* Adjust emoji size */
-            background: #F3F4F6 !important; /* Light background instead of loud blue */
-            color: #1F2937 !important;
-            border: 1px solid #E5E7EB !important;
-        }
-
-        [data-testid="stPopover"] button:hover {
-            background: #E5E7EB !important;
-        }
-
-        [data-testid="stPopover"] button div[data-testid="stMarkdownContainer"] {
-            width: 100% !important;
-            height: 100% !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            margin: 0 !important;
-            padding: 0 !important;
-        }
-
         /* 5. RESPONSIVENESS ENGINE (Media Queries) */
 
         /* Tablet & Mobile Tweaks */
@@ -193,23 +162,6 @@ def inject_minimalist_theme():
                 width: 100% !important;
                 height: 48px !important; /* Larger touch target */
                 font-size: 1rem !important;
-            }
-
-            /* 6. Profile Button Alignment on Mobile */
-            [data-testid="stPopover"] {
-                width: 100% !important;
-            }
-            [data-testid="stPopover"] button {
-                width: 100% !important;
-                border-radius: 8px !important; /* Rectangular on mobile for better touch */
-                justify-content: flex-start !important;
-                padding-left: 15px !important;
-            }
-            [data-testid="stPopover"] button::after {
-                content: "  Account Settings";
-                font-size: 0.9rem;
-                font-weight: 500;
-                margin-left: 10px;
             }
         }
 

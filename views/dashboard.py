@@ -151,28 +151,34 @@ def _pager(cfg: TableConfig, page: int, pages: int) -> None:
     )
 
 
-def _downloads(cfg: TableConfig, filters: dict, total_rows: int) -> None:
+def _download_menu(cfg: TableConfig, filters: dict, total_rows: int) -> None:
+    """One "Download" button; the menu offers CSV or Excel of *all* matching rows (not just this page)."""
     stamp = datetime.now().strftime("%Y%m%d_%H%M")
     base = f"{cfg.name}_{stamp}"
-    note = f" (first {MAX_EXPORT_ROWS:,})" if total_rows > MAX_EXPORT_ROWS else ""
-    c1, c2, _ = st.columns([1.3, 1.3, 4])
-    # Files are built only when clicked (callable data), from *all* matching rows.
-    c1.download_button(
-        f"⬇️ CSV{note}",
-        data=lambda: to_csv_bytes(cfg, fetch_for_export(cfg.name, filters)),
-        file_name=f"{base}.csv",
-        mime="text/csv",
-        width="stretch",
-        on_click="ignore",
-    )
-    c2.download_button(
-        f"⬇️ Excel{note}",
-        data=lambda: to_excel_bytes(cfg, fetch_for_export(cfg.name, filters)),
-        file_name=f"{base}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        width="stretch",
-        on_click="ignore",
-    )
+    count = min(total_rows, MAX_EXPORT_ROWS)
+    with st.popover("⬇️ Download", width="stretch"):
+        st.caption(
+            f"All **{count:,}** matching rows"
+            + (f" (first {MAX_EXPORT_ROWS:,})" if total_rows > MAX_EXPORT_ROWS else "")
+            + ", with the current filters."
+        )
+        # Files are built only when clicked (callable data).
+        st.download_button(
+            "📄 CSV (.csv)",
+            data=lambda: to_csv_bytes(cfg, fetch_for_export(cfg.name, filters)),
+            file_name=f"{base}.csv",
+            mime="text/csv",
+            width="stretch",
+            on_click="ignore",
+        )
+        st.download_button(
+            "📊 Excel (.xlsx)",
+            data=lambda: to_excel_bytes(cfg, fetch_for_export(cfg.name, filters)),
+            file_name=f"{base}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            width="stretch",
+            on_click="ignore",
+        )
 
 
 def dashboard_screen(cfg: TableConfig) -> None:
@@ -205,10 +211,16 @@ def dashboard_screen(cfg: TableConfig) -> None:
             show_error("Could not load rows from the database. Please try again in a moment.", e)
             return
 
-    info, picker = st.columns([4, 1.4], vertical_alignment="bottom")
+    # Table toolbar: row count on the left; page size and download on the right.
+    info, picker, download = st.columns([4, 1.4, 1.4], vertical_alignment="bottom")
     first, last = (offset + 1, offset + len(df)) if len(df) else (0, 0)
     info.caption(f"Showing **{first:,}–{last:,}** of **{totals['rows']:,}** rows · newest first")
     picker.selectbox("Rows to show", list(ROW_CHOICES), key=f"dash_rows_{cfg.name}")
+    with download:
+        _download_menu(cfg, filters, totals["rows"])
+    # Room for the table's own hover toolbar, which floats just above the table and would
+    # otherwise cover the Download button.
+    st.markdown("<div style='height: 1.75rem'></div>", unsafe_allow_html=True)
 
     df = df.drop(columns=list(SYSTEM_COLUMNS), errors="ignore")
     df = remove_zero_columns(df)
@@ -219,4 +231,3 @@ def dashboard_screen(cfg: TableConfig) -> None:
     st.dataframe(df, width="stretch", hide_index=True)
 
     _pager(cfg, page, pages)
-    _downloads(cfg, filters, totals["rows"])
