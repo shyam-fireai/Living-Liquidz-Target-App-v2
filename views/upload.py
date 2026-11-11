@@ -169,7 +169,6 @@ def _save(cfg: TableConfig, changes, file_name: str) -> None:
         "summary": changes.summary,
         "file_name": file_name,
     }
-    st.cache_data.clear()
     st.rerun()
 
 

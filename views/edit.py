@@ -89,7 +89,6 @@ def _save(cfg: TableConfig, check, original_rows: pd.DataFrame, n_cells: int) ->
 
     st.session_state.edit_flash = {"ok": report.ok, "message": report.message}
     _discard_changes()
-    st.cache_data.clear()
     st.rerun()
 
 

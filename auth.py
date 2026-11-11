@@ -183,8 +183,6 @@ def show_login_page():
                 cookie_manager.set("auth_session_active", "1", key="set_asa", expires_at=expiry)
 
                 logger.info("User %s logged in", username_or_email)
-                # Force a cache clear to ensure the first dashboard load is live and correct
-                st.cache_data.clear()
                 st.rerun()
             else:
                 logger.warning(f"Login failed for {username_or_email}: {response_data}")

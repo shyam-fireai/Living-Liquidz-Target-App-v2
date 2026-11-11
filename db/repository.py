@@ -22,6 +22,27 @@ _MUTATION_SETTINGS = {"mutations_sync": 1}
 
 
 # -------------------------------
+# Per-table cache invalidation
+# -------------------------------
+@st.cache_resource
+def _versions() -> dict[str, int]:
+    """Process-wide data version per table, shared by every user session."""
+    return {}
+
+
+def data_version(table: str) -> int:
+    return _versions().get(table, 0)
+
+
+def invalidate(*tables: str) -> None:
+    """Mark tables as changed: cached reads of *these* tables are refetched (for every user);
+    cached reads of other tables stay. Called by every write below."""
+    versions = _versions()
+    for table in tables:
+        versions[table] = versions.get(table, 0) + 1
+
+
+# -------------------------------
 # WHERE-clause builder
 # -------------------------------
 def _param_type(table: str, col: str) -> str:
@@ -72,28 +93,39 @@ def _order_by(table: str) -> str:
     return ", ".join([f"{cfg.date_col} DESC", *[c for c in cfg.key_cols if c != cfg.date_col]])
 
 
-@st.cache_data(ttl=60, show_spinner=False)
-def fetch_data(table: str, filters: dict | None = None, limit: int = DEFAULT_ROW_LIMIT) -> pd.DataFrame:
-    """Rows for display. Raises on database errors (callers show a friendly message)."""
+def fetch_data(
+    table: str, filters: dict | None = None, limit: int = DEFAULT_ROW_LIMIT, offset: int = 0
+) -> pd.DataFrame:
+    """One page of rows for display (paging is done by ClickHouse). Raises on database errors."""
     get_table(table)
+    return _fetch_data(table, filters, int(limit), int(offset), data_version(table))
+
+
+@st.cache_data(ttl=60, max_entries=500, show_spinner=False)
+def _fetch_data(table: str, filters: dict | None, limit: int, offset: int, version: int) -> pd.DataFrame:
     where, params = build_where(table, filters)
-    params["limit"] = int(limit)
+    params.update(limit=limit, offset=offset)
     query = (
         f"SELECT * FROM {table} FINAL WHERE {where} ORDER BY {_order_by(table)} "
-        "LIMIT {limit:UInt32} SETTINGS max_execution_time=60"
+        "LIMIT {limit:UInt32} OFFSET {offset:UInt32} SETTINGS max_execution_time=60"
     )
     result = get_client().query(query, parameters=params)
     df = pd.DataFrame(result.result_rows, columns=result.column_names)
-    logger.info("Fetched %d rows from %s", len(df), table)
+    logger.info("Fetched %d rows from %s (offset %d)", len(df), table, offset)
     return df
 
 
 MAX_EXPORT_ROWS = 200_000
 
 
-@st.cache_data(ttl=60, show_spinner=False)
 def summarize(table: str, filters: dict | None = None) -> dict:
     """Totals over *all* rows matching the filters (not just the rows on screen)."""
+    get_table(table)
+    return _summarize(table, filters, data_version(table))
+
+
+@st.cache_data(ttl=60, max_entries=500, show_spinner=False)
+def _summarize(table: str, filters: dict | None, version: int) -> dict:
     cfg = get_table(table)
     where, params = build_where(table, filters)
     sums = ", ".join(f"sum({c}) AS {c}" for c in cfg.value_cols)
@@ -146,9 +178,14 @@ def known_values(table: str, cols: tuple[str, ...] = ("branch_name", "series_gro
     return {c: v for c, v in known.items() if v}
 
 
-@st.cache_data(ttl=300, show_spinner=False)
 def get_filter_index(table: str) -> pd.DataFrame:
     """Distinct combinations of all filter columns, for fast in-memory cascading filters."""
+    get_table(table)
+    return _filter_index(table, data_version(table))
+
+
+@st.cache_data(ttl=300, max_entries=50, show_spinner=False)
+def _filter_index(table: str, version: int) -> pd.DataFrame:
     cols = get_table(table).filter_cols
     query = f"SELECT DISTINCT {', '.join(cols)} FROM {table} FINAL WHERE is_active = 1"
     try:
@@ -216,6 +253,7 @@ def insert_dataframe(table: str, df: pd.DataFrame) -> tuple[bool, str]:
         df = df[[c for c in schema if c in df.columns]]
 
         client.insert_df(table, df)
+        invalidate(table)
         logger.info("Inserted %d rows into %s", len(df), table)
         return True, f"{len(df)} records updated successfully"
     except Exception as e:
@@ -241,6 +279,7 @@ def deactivate_keys(table: str, key_rows: list[dict]) -> None:
     query = f"ALTER TABLE {table} UPDATE is_active = 0 WHERE {' OR '.join(clauses)}"
     logger.info("Deactivating %d old key(s) in %s", len(key_rows), table)
     get_client().command(query, parameters=params, settings=_MUTATION_SETTINGS)
+    invalidate(table)
 
 
 def deactivate_daily_for_months(month_keys: list[dict]) -> None:
@@ -262,3 +301,4 @@ def deactivate_daily_for_months(month_keys: list[dict]) -> None:
     query = f"ALTER TABLE {DATE_BRANCH} UPDATE is_active = 0 WHERE {' OR '.join(clauses)}"
     logger.info("Deactivating daily targets for %d month key(s)", len(month_keys))
     get_client().command(query, parameters=params, settings=_MUTATION_SETTINGS)
+    invalidate(DATE_BRANCH)
