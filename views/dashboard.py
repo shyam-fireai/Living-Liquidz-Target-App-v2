@@ -1,5 +1,6 @@
 """Dashboard: summary cards, filtered table with a visible row count, and CSV/Excel export."""
 
+import html
 import logging
 from datetime import datetime
 
@@ -39,6 +40,42 @@ def _header(cfg: TableConfig) -> None:
             st.rerun()
 
 
+KPI_CSS = """
+<style>
+.kpi-row { display: flex; flex-wrap: wrap; gap: 12px; margin: 4px 0 12px; }
+.kpi-card {
+    flex: 1 1 130px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px;
+    padding: 14px 18px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+.kpi-value {
+    font-size: 1.75rem; font-weight: 700; color: #0f172a; line-height: 1.2;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.kpi-label {
+    font-size: 0.85rem; font-weight: 500; color: #64748b; margin-top: 4px;
+}
+@media (max-width: 640px) {
+    .kpi-card { padding: 10px 14px; }
+    .kpi-value { font-size: 1.35rem; }
+}
+</style>
+"""
+
+
+def _kpi_cards_html(cards: list[tuple[str, str, str | None]]) -> str:
+    """Big value on top, small label below. Hovering a card shows the exact total."""
+    items = []
+    for label, value, exact in cards:
+        tip = f' title="Exact total: {html.escape(exact)}"' if exact else ""
+        items.append(
+            f'<div class="kpi-card"{tip}>'
+            f'<div class="kpi-value">{html.escape(value)}</div>'
+            f'<div class="kpi-label">{html.escape(label)}</div>'
+            "</div>"
+        )
+    return KPI_CSS + f'<div class="kpi-row">{"".join(items)}</div>'
+
+
 def _summary_cards(cfg: TableConfig, totals: dict) -> None:
     """Rows, branches, and Target/Incentive 1 totals; other non-zero levels as a caption."""
     first_target = cfg.value_cols[0]  # target_value1 / target_qty1
@@ -61,8 +98,7 @@ def _summary_cards(cfg: TableConfig, totals: dict) -> None:
                 format_indian_number(totals["incentive_value1"]),
             )
         )
-    for col, (label, value, exact) in zip(st.columns(len(cards)), cards, strict=True):
-        col.metric(label, value, help=f"Exact total: {exact}" if exact else None)
+    st.markdown(_kpi_cards_html(cards), unsafe_allow_html=True)
 
     extra = [
         f"{format_column(c)} {format_indian_number(totals[c], show_rupee=money or 'incentive' in c)}"
