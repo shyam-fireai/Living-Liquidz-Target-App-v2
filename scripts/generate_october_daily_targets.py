@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 from datetime import datetime
 
@@ -7,8 +8,13 @@ import pandas as pd
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
+# Allow `python scripts/generate_october_daily_targets.py` from anywhere: import the app's shared rules.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from services.targets import distribute_target, month_weights  # noqa: E402
+
 # Paths
-WORKSPACE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# scripts/ -> project dir -> "Living Liquid" workspace (data folders live next to the code)
+WORKSPACE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DATA_DIR = os.path.join(WORKSPACE_DIR, "12_10_2026")
 MONTHLY_TARGET_FILE = os.path.join(DATA_DIR, "branch_wise_monthly_target_sample.csv")
 
@@ -23,54 +29,16 @@ OUTPUT_CSV_PATH_2 = os.path.join(WORKSPACE_DIR, OUTPUT_CSV_FILENAME)
 
 
 def generate_october_weights():
-    """
-    Generate daily split weights for October 2026 (31 days).
-    Standard weight structure consistent with Dynamic Split:
-      - Weekday (Mon - Thu): Weight 3
-      - Weekend (Fri - Sun): Weight 5
-    """
-    dates = pd.date_range("2026-10-01", "2026-10-31")
-    weights = []
-    for d in dates:
-        # d.weekday(): 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun
-        w = 5.0 if d.weekday() in [4, 5, 6] else 3.0
-        weights.append(
-            {
-                "date": d.strftime("%Y-%m-%d"),
-                "day": d.strftime("%a").lower(),
-                "weight": w,
-            }
-        )
-
-    df_weights = pd.DataFrame(weights)
-    total_weight = df_weights["weight"].sum()
-    df_weights["ratio"] = df_weights["weight"] / total_weight
+    """October 2026 weights from the shared app rule (Mon-Thu 3, Fri-Sun 5)."""
+    df_weights = month_weights("2026-10-01")
+    df_weights["day"] = df_weights["date"].dt.strftime("%a").str.lower()
+    df_weights["date"] = df_weights["date"].dt.strftime("%Y-%m-%d")
     df_weights["pct_target"] = df_weights["ratio"]
     df_weights["mtd_pct"] = df_weights["pct_target"].cumsum()
-
-    print(f"Generated dynamic weights for October 2026: {len(df_weights)} days. Total weight: {total_weight:.0f}")
+    print(
+        f"Generated dynamic weights for October 2026: {len(df_weights)} days. Total weight: {df_weights['weight'].sum():.0f}"
+    )
     return df_weights
-
-
-def distribute_target(monthly_val, ratios, n_days):
-    """
-    Distribute monthly target across days using ratios.
-    Adjusts the final day with remainder to guarantee 0.00 exact precision.
-    """
-    if monthly_val is None or pd.isna(monthly_val) or monthly_val == 0:
-        return [None] * n_days
-
-    daily_vals = []
-    accumulated = 0.0
-    for i in range(n_days - 1):
-        val = round(monthly_val * ratios[i], 2)
-        daily_vals.append(val)
-        accumulated += val
-
-    # Last day gets remainder to ensure exact match
-    last_val = round(monthly_val - accumulated, 2)
-    daily_vals.append(last_val)
-    return daily_vals
 
 
 def main():
@@ -125,11 +93,11 @@ def main():
         m_t5 = m_row["target_value5"] if pd.notna(m_row["target_value5"]) and m_row["target_value5"] != 0 else None
 
         # Distribute each target separately
-        daily_t1 = distribute_target(m_t1, ratios, N)
-        daily_t2 = distribute_target(m_t2, ratios, N)
-        daily_t3 = distribute_target(m_t3, ratios, N)
-        daily_t4 = distribute_target(m_t4, ratios, N)
-        daily_t5 = distribute_target(m_t5, ratios, N)
+        daily_t1 = distribute_target(m_t1, ratios)
+        daily_t2 = distribute_target(m_t2, ratios)
+        daily_t3 = distribute_target(m_t3, ratios)
+        daily_t4 = distribute_target(m_t4, ratios)
+        daily_t5 = distribute_target(m_t5, ratios)
 
         # Verification calculations
         sum_d1 = sum(v for v in daily_t1 if v is not None) if m_t1 is not None else 0.0
