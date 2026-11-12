@@ -1,68 +1,53 @@
 """Shared page widgets."""
 
+import html
 import logging
 
 import streamlit as st
 
+from ui.branding import FIREAI_LOGO_WHITE, LIVING_LIQUIDZ_LOGO, logo_html
+
 logger = logging.getLogger(__name__)
 
 
-def render_header(title="Dashboard", buttons=2):
-    """Toolbar row: title on the left, `buttons` equal button slots on the right (returned as a list)."""
+def render_header(title="Dashboard", buttons=2, crumb=""):
+    """Toolbar row: title on the left, `buttons` equal button slots on the right (returned as a list).
+
+    `crumb` is a small line above the title (e.g. "Sales targets").
+    """
     logger.debug("Rendering header toolbar for: %s", title)
 
     # User details and Logout live in the sidebar user card (render_user_card), not in the header.
-    spacer = max(1.0, 7.0 - 1.4 * buttons)
-    col_brand, _, *slots = st.columns([3, spacer] + [1.4] * buttons, vertical_alignment="center")
-
-    with col_brand:
-        st.markdown(
-            f"""
-            <div style="display: flex; align-items: center; gap: 12px;">
-                <button
-                    onclick="window.parent.document.querySelector('button[aria-label=\\'Open sidebar\\'], button[data-testid=\\'stSidebarCollapseButton\\']').click();"
-                    style="
-                        background: none;
-                        border: none;
-                        cursor: pointer;
-                        font-size: 1.2rem;
-                        padding: 0;
-                        margin: 0;
-                        display: flex;
-                        align-items: center;
-                        color: #1e293b;
-                    "
-                    class="mobile-menu-btn"
-                >
-                    ☰
-                </button>
-                <h2 style="margin: 0; font-size: 1.2rem; font-weight: 600; color: #1e293b; white-space: nowrap; border: none !important;">{title}</h2>
-            </div>
-            <style>
-                /* Hide the custom menu button on Desktop, only show on Mobile/Tablet */
-                .mobile-menu-btn {{
-                    display: none !important;
-                }}
-                @media (max-width: 1024px) {{
-                    .mobile-menu-btn {{
-                        display: flex !important;
-                    }}
-                }}
-            </style>
-        """,
+    # The keyed container gets the CSS class .st-key-ll_header, which ui/theme.py pins to the top.
+    with st.container(key="ll_header"):
+        spacer = max(1.0, 7.0 - 1.4 * buttons)
+        col_brand, _, *slots = st.columns([3, spacer] + [1.4] * buttons, vertical_alignment="center")
+        crumb_html = f'<div class="ll-crumb">{html.escape(crumb)}</div>' if crumb else ""
+        col_brand.markdown(
+            f'{crumb_html}<div class="ll-title">{html.escape(title)}</div>',
             unsafe_allow_html=True,
         )
-
     return slots
 
 
 def show_error(message: str, exc: BaseException | None = None) -> None:
     """Friendly error for users; technical details only in a collapsed expander (and in the logs)."""
-    st.error(f"❌ {message}")
+    st.error(message, icon=":material/error:")
     if exc is not None:
         logger.error("%s: %r", message, exc)
         with st.expander("Technical details"):
             st.code(f"{type(exc).__name__}: {exc}")
+
+
+def sidebar_label(text: str) -> None:
+    """Small upper-case section label in the sidebar (Tables, Filters)."""
+    st.sidebar.markdown(f'<div class="ll-side-label">{html.escape(text)}</div>', unsafe_allow_html=True)
+
+
+def render_sidebar_brand() -> None:
+    """Living Liquidz logo at the top of the sidebar."""
+    logo = logo_html(LIVING_LIQUIDZ_LOGO, "Living Liquidz", 84, "border-radius:12px;display:block")
+    st.sidebar.markdown(f'<div class="ll-brand">{logo}</div>', unsafe_allow_html=True)
 
 
 def render_user_card() -> None:
@@ -78,12 +63,16 @@ def render_user_card() -> None:
 
     st.sidebar.divider()
     with st.sidebar.container(border=True):
-        st.markdown(f"\U0001f464 **{name}**")
+        st.markdown(f"**{name}**")
         if email and email != name:
-            st.caption(email)
+            # Raw HTML: st.caption would turn the address into a link, which is dark blue on the navy sidebar.
+            st.markdown(f'<div class="ll-user-email">{html.escape(email)}</div>', unsafe_allow_html=True)
         expires_at = st.session_state.get("session_expires_at")
         if expires_at:
             ends = datetime.fromtimestamp(int(expires_at), tz=DISPLAY_TZ)
-            st.caption(f"⏱️ Session ends at {ends:%H:%M} {ends.tzname()}")
-        if st.button("\U0001f6aa Logout", width="stretch", key="sidebar_logout"):
+            st.caption(f"Session ends at {ends:%H:%M} {ends.tzname()}")
+        if st.button("Log out", icon=":material/logout:", width="stretch", key="sidebar_logout"):
             logout(get_cookie_manager())
+
+    fireai = logo_html(FIREAI_LOGO_WHITE, "FireAI", 26)
+    st.sidebar.markdown(f'<div class="ll-powered">Powered by {fireai}</div>', unsafe_allow_html=True)

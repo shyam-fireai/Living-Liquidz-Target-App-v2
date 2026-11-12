@@ -40,9 +40,9 @@ def _show_flash() -> None:
     if not flash:
         return
     if flash["ok"]:
-        st.toast(flash["message"], icon="✅")
+        st.toast(flash["message"], icon=":material/check_circle:")
     else:
-        st.warning(f"⚠️ {flash['message']}")
+        st.warning(flash["message"], icon=":material/warning:")
 
 
 def _diff_table(cfg: TableConfig, diff: pd.DataFrame):
@@ -69,7 +69,7 @@ def _save(cfg: TableConfig, check, original_rows: pd.DataFrame, n_cells: int) ->
 
     if report.nothing_saved:
         log_audit_action("ERROR", target_table=table, error_message=report.message)
-        st.error(f"❌ {report.message}")
+        st.error(report.message, icon=":material/error:")
         return
 
     log_audit_action(
@@ -100,9 +100,9 @@ def edit_screen(cfg: TableConfig) -> None:
     if st.session_state.get("edit_last_table") != table:
         _reset_edit_state(table)
 
-    (col_back,) = render_header(title=f"Editing: {cfg.display_name}", buttons=1)
+    (col_back,) = render_header(title=f"Edit: {cfg.display_name}", buttons=1, crumb="Sales targets")
     with col_back:
-        if st.button("⬅️ Back", width="stretch"):
+        if st.button("Back", icon=":material/arrow_back:", width="stretch"):
             st.session_state.page = "dashboard"
             st.rerun()
     _show_flash()
@@ -127,7 +127,7 @@ def edit_screen(cfg: TableConfig) -> None:
         st.session_state.edit_original_df = display_df.copy()
     original_df = st.session_state.edit_original_df
 
-    tip = "\U0001f4a1 Edit cells in the table, review the changes below, then save."
+    tip = "Edit cells in the table, review the changes below, then save."
     st.caption(("Showing the first 200 rows; use the filters to narrow down. " if not filters else "") + tip)
 
     edited_df = st.data_editor(
@@ -149,7 +149,7 @@ def edit_screen(cfg: TableConfig) -> None:
     diff = cell_changes(cfg, original_rows, edited_rows)
 
     st.divider()
-    st.subheader(f"\U0001f50d Review {len(diff)} change(s) in {int(mask.sum())} row(s)")
+    st.subheader(f"Review {len(diff)} change(s) in {int(mask.sum())} row(s)")
     st.dataframe(_diff_table(cfg, diff), width="stretch", hide_index=True)
 
     check = check_edits(cfg, original_rows, edited_rows)
@@ -162,22 +162,27 @@ def edit_screen(cfg: TableConfig) -> None:
     if check.ok and check.replaced_keys:
         keys_label = " / ".join(format_column(c) for c in cfg.key_cols)
         st.warning(
-            f"⚠️ {len(check.replaced_keys)} row(s) have a changed key ({keys_label}). On save the old row"
+            f"{len(check.replaced_keys)} row(s) have a changed key ({keys_label}). On save the old row"
             + (" and its daily targets" if table == BRANCH_MONTHLY else "")
-            + " will be replaced by the new one."
+            + " will be replaced by the new one.",
+            icon=":material/warning:",
         )
     if not check.ok:
-        st.error(f"❌ **{len(check.problems)} problem(s) must be fixed before saving:**")
+        st.error(f"**{len(check.problems)} problem(s) must be fixed before saving:**", icon=":material/error:")
         st.dataframe(pd.DataFrame(check.problems), width="stretch", hide_index=True)
 
     col_save, col_discard, _ = st.columns([2, 1.2, 3])
     with col_discard:
-        if st.button("↩️ Discard changes", width="stretch"):
+        if st.button("Discard changes", icon=":material/undo:", width="stretch"):
             _discard_changes()
             st.rerun()
     with col_save:
         clicked = st.button(
-            f"\U0001f4be Save {len(diff)} change(s)", type="primary", width="stretch", disabled=not check.ok
+            f"Save {len(diff)} change(s)",
+            icon=":material/save:",
+            type="primary",
+            width="stretch",
+            disabled=not check.ok,
         )
     if clicked:
         try:

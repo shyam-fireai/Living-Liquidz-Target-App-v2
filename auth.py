@@ -1,4 +1,5 @@
 import datetime
+import html
 import json
 import logging
 import time
@@ -10,6 +11,7 @@ import streamlit as st
 
 from config import get_allowed_emails, get_secret, session_seconds
 from services.session import create_token, token_expiry, verify_token
+from ui.branding import APP_NAME, CARD_BG, FIREAI_LOGO, LIVING_LIQUIDZ_LOGO, MUTED, NAVY, TEXT, logo_html
 
 logger = logging.getLogger(__name__)
 
@@ -75,70 +77,81 @@ def get_cookie_manager():
     return st.session_state.cookie_manager_instance
 
 
+# Login page: white card centred on the navy brand background (palette: ui/branding.py).
+_LOGIN_CSS = f"""
+<style>
+    [data-testid="stAppViewContainer"] {{
+        background-color: {NAVY} !important;
+    }}
+    .main, [data-testid="stMain"] {{
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        min-height: 100vh !important;
+        width: 100% !important;
+        background-color: transparent !important;
+    }}
+    .block-container {{
+        background-color: {CARD_BG} !important;
+        border-radius: 16px !important;
+        padding: 36px 32px 28px !important;
+        margin: 24px auto !important;
+        max-width: 420px !important;
+        display: block !important;
+    }}
+    [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stSidebarNav"], [data-testid="stBottom"],
+    [data-testid="stSidebarCollapsedControl"], [data-testid="stExpandSidebarButton"] {{
+        display: none !important;
+    }}
+    [data-testid="stForm"] {{
+        border: none !important;
+        padding: 0 !important;
+    }}
+    .stFormSubmitButton > button, .stButton > button {{
+        width: 100%;
+        min-height: 3rem;
+        font-weight: 600;
+    }}
+    .ll-login-title {{
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: {TEXT};
+        text-align: center;
+    }}
+    .ll-login-sub {{
+        color: {MUTED};
+        text-align: center;
+        margin: 4px 0 12px;
+    }}
+    .ll-login-powered {{
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        font-size: 0.75rem;
+        color: {MUTED};
+        margin-top: 16px;
+    }}
+</style>
+"""
+
+
 def show_login_page():
     cookie_manager = get_cookie_manager()
 
+    st.markdown(_LOGIN_CSS, unsafe_allow_html=True)
+
+    logo = logo_html(LIVING_LIQUIDZ_LOGO, "Living Liquidz", 88, "border-radius:14px;display:block;margin:0 auto 20px")
     st.markdown(
-        """
-        <style>
-        /* 1. Global Centering Reset */
-        [data-testid="stAppViewContainer"] {
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            height: 100vh !important;
-            overflow: hidden !important;
-        }
-
-        .main {
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            height: 100vh !important;
-            width: 100% !important;
-            overflow: hidden !important;
-        }
-
-        .block-container {
-            padding: 0 !important;
-            margin: 0 !important;
-            max-width: 450px !important;
-            display: block !important;
-        }
-
-        /* 2. Remove Scrollbars and Chrome */
-        * {
-            -ms-overflow-style: none !important;
-            scrollbar-width: none !important;
-        }
-        *::-webkit-scrollbar {
-            display: none !important;
-        }
-        [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stSidebarNav"], [data-testid="stBottom"] {
-            display: none !important;
-        }
-
-        /* 3. Button Polish */
-        .stButton>button {
-            width: 100%;
-            border-radius: 8px;
-            height: 3rem;
-            font-weight: 600;
-        }
-        </style>
-    """,
+        f'{logo}<div class="ll-login-title">Sign in</div>'
+        f'<div class="ll-login-sub">{html.escape(APP_NAME)}<br>Use your FireAI account.</div>',
         unsafe_allow_html=True,
     )
-
-    # Clean, Centered Content
-    st.title("Secure Login")
-    st.markdown("Enter your credentials to access the Application.")
-    st.divider()
 
     with st.form("login_form"):
         username_or_email = st.text_input("Company Email", placeholder="Enter your email")
         password = st.text_input("Password", type="password", placeholder="Enter your password")
-        submitted = st.form_submit_button("Login", type="primary")
+        submitted = st.form_submit_button("Sign in", type="primary", width="stretch")
 
         if submitted:
             st.info("Authenticating...")
@@ -186,7 +199,10 @@ def show_login_page():
                 st.rerun()
             else:
                 logger.warning(f"Login failed for {username_or_email}: {response_data}")
-                st.error(f"🔒 {response_data}")
+                st.error(f"{response_data}", icon=":material/lock:")
+
+    fireai = logo_html(FIREAI_LOGO, "FireAI", 22)
+    st.markdown(f'<div class="ll-login-powered">Powered by {fireai}</div>', unsafe_allow_html=True)
 
     st.stop()
 

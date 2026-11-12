@@ -1,177 +1,176 @@
+"""Custom CSS on top of the native theme in .streamlit/config.toml (palette: ui/branding.py)."""
+
 import logging
 
 import streamlit as st
 
+from ui.branding import BORDER, CARD_BG, MUTED, MUTED_ON_DARK, NAVY_ACTIVE, PAGE_BG, PRIMARY_LIGHT, TEXT
+
 logger = logging.getLogger(__name__)
 
+_CSS = f"""
+<style>
+    /* 1. PAGE: light grey ground, white cards and inputs */
+    [data-testid="stAppViewContainer"], [data-testid="stMain"] {{
+        background-color: {PAGE_BG} !important;
+    }}
+    header[data-testid="stHeader"] {{
+        background-color: rgba(255, 255, 255, 0) !important;
+    }}
+    [data-testid="stDecoration"] {{
+        display: none !important;
+    }}
+    /* Eliminate the large default gap above the content */
+    .block-container {{
+        padding-top: 1rem !important;
+        padding-bottom: 2rem !important;
+        max-width: 98% !important;
+        margin-top: -1.5rem !important;
+    }}
+    [data-testid="stMain"] [data-baseweb="select"] > div,
+    [data-testid="stMain"] [data-baseweb="input"],
+    [data-testid="stMain"] [data-baseweb="base-input"],
+    [data-testid="stMain"] [data-testid="stExpander"] details,
+    [data-testid="stMain"] [data-testid="stFileUploaderDropzone"] {{
+        background-color: {CARD_BG} !important;
+    }}
 
-def inject_minimalist_theme():
-    """Injects high-quality CSS for an Absolute Top Toolbar style."""
+    /* 2. HEADER TOOLBAR (ui.components.render_header): pinned to the top of the page */
+    .st-key-ll_header {{
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 1000 !important;
+        background-color: {PAGE_BG} !important;
+        padding: 0.75rem 0 0.75rem !important;
+        margin-bottom: 0.5rem !important;
+    }}
+    .ll-crumb {{
+        font-size: 0.78rem;
+        color: {MUTED};
+        line-height: 1.3;
+    }}
+    .ll-title {{
+        font-size: 1.5rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        color: {TEXT};
+        line-height: 1.25;
+    }}
 
-    premium_css = """
-    <style>
-        /* Global Background & Font */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    /* 3. BUTTONS: colours come from the theme; only size and weight are set here */
+    div.stButton > button,
+    div.stDownloadButton > button,
+    div.stFormSubmitButton > button,
+    [data-testid="stPopover"] button {{
+        min-height: 42px !important;
+        font-weight: 600 !important;
+    }}
+    div.stButton > button p,
+    div.stDownloadButton > button p {{
+        white-space: nowrap !important;
+        font-weight: 600 !important;
+    }}
 
-        html, body, [data-testid="stAppViewContainer"] {
-            font-family: 'Inter', sans-serif;
-            background-color: #FFFFFF !important;
-        }
+    /* 4. SIDEBAR: brand, section labels, table list styled as navigation, user card */
+    .ll-brand {{
+        margin: 0 0 0.75rem;
+    }}
+    .ll-side-label {{
+        font-size: 0.7rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: {MUTED_ON_DARK};
+        margin: 0.75rem 0 0.1rem;
+    }}
+    .ll-user-email {{
+        font-size: 0.85rem;
+        color: #C9CDD4;
+        overflow-wrap: anywhere;
+    }}
+    /* links on the navy sidebar need a light blue to stay readable */
+    [data-testid="stSidebar"] a {{
+        color: #9CC2FF !important;
+    }}
+    .ll-powered {{
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.75rem;
+        color: {MUTED_ON_DARK};
+        margin-top: 0.5rem;
+    }}
+    [data-testid="stSidebar"] [role="radiogroup"] {{
+        gap: 4px !important;
+        width: 100%;
+    }}
+    [data-testid="stSidebar"] [role="radiogroup"] > label {{
+        width: 100%;
+        min-height: 44px;
+        margin: 0 !important;
+        padding: 8px 12px !important;
+        border-radius: 10px;
+        align-items: center;
+        cursor: pointer;
+    }}
+    /* hide the radio dot: the highlighted row shows the selection */
+    [data-testid="stSidebar"] [role="radiogroup"] > label > div:first-child {{
+        display: none !important;
+    }}
+    [data-testid="stSidebar"] [role="radiogroup"] > label:hover {{
+        background-color: rgba(255, 255, 255, 0.06);
+    }}
+    [data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked) {{
+        background-color: {NAVY_ACTIVE};
+        box-shadow: inset 3px 0 0 {PRIMARY_LIGHT};
+    }}
+    [data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked) p {{
+        font-weight: 600;
+        color: #FFFFFF;
+    }}
 
-        /* 1. NUKE THE TOP WHITE SPACE BUT KEEP TOGGLE BUTTON */
-        header[data-testid="stHeader"] {
-            background-color: rgba(255, 255, 255, 0) !important;
-            color: #1e293b !important;
-        }
+    /* 5. KPI CARDS (views.dashboard) */
+    .kpi-row {{ display: flex; flex-wrap: wrap; gap: 16px; margin: 4px 0 12px; }}
+    .kpi-card {{
+        flex: 1 1 160px; background: {CARD_BG}; border: 1px solid {BORDER}; border-radius: 12px;
+        padding: 16px 20px;
+    }}
+    .kpi-label {{
+        font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: {MUTED};
+    }}
+    .kpi-value {{
+        font-size: 1.85rem; font-weight: 600; color: {TEXT}; line-height: 1.25; margin-top: 4px;
+        font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }}
 
-        [data-testid="stDecoration"] {
-            display: none !important;
-        }
+    /* 6. RESPONSIVE */
+    @media (max-width: 1024px) {{
+        .block-container {{
+            padding-left: 2rem !important;
+            padding-right: 2rem !important;
+        }}
+    }}
+    @media (max-width: 768px) {{
+        [data-testid="stSidebar"] {{
+            width: 100% !important;
+        }}
+        .ll-title {{
+            font-size: 1.15rem;
+        }}
+        /* Larger touch targets */
+        div.stButton > button {{
+            width: 100% !important;
+            min-height: 48px !important;
+        }}
+        .kpi-card {{ padding: 10px 14px; }}
+        .kpi-value {{ font-size: 1.35rem; }}
+    }}
 
-        /* Ensure the sidebar toggle button is visible and matches our theme */
-        [data-testid="stHeader"] button {
-            color: #1e293b !important;
-            background-color: transparent !important;
-        }
+    footer {{ visibility: hidden !important; }}
+</style>
+"""
 
-        /* Target the Main Block Container to eliminate the huge default Streamlit gap */
-        .block-container {
-            padding-top: 1rem !important; /* Brings everything much higher */
-            padding-bottom: 0rem !important;
-            max-width: 98% !important;
-            margin-top: -1.5rem !important; /* Pull up slightly more if needed */
-        }
 
-        /* 2. PIN THE NAVIGATION BAR */
-        /* Target the row containing the header content */
-        [data-testid="stVerticalBlock"] > div:has(h2) {
-            position: sticky !important;
-            top: 0 !important;
-            left: 0 !important;
-            right: 0 !important;
-            z-index: 1000 !important;
-            background-color: white !important;
-            border: none !important; /* Remove ALL borders */
-            padding: 1rem 40px !important;
-            margin-bottom: 2rem !important;
-            display: flex !important;
-            align-items: center !important;
-            box-shadow: none !important;
-            border-radius: 0 !important; /* Un-box the top header */
-        }
-
-        /* Prevent rogue bottom borders on native elements */
-        h2 {
-            border: none !important;
-            padding-bottom: 0 !important;
-        }
-
-        /* 3. FIX BUTTON SIZES AND ALLIGNMENT */
-        /* Make Edit and Upload uniform */
-        div.stButton > button {
-            height: 42px !important;
-            display: flex !important;
-            justify-content: center !important;
-            align-items: center !important;
-            background: #2563EB !important;
-            color: white !important;
-            border-radius: 8px !important;
-            font-size: 0.95rem !important;
-            font-weight: 600 !important;
-            padding: 0 20px !important;
-            line-height: 1 !important;
-            border: none !important;
-            transition: background-color 0.2s ease !important;
-        }
-
-        div.stButton > button:hover {
-            background-color: #1D4ED8 !important;
-        }
-
-        /* Force icon + text to align properly horizontally and never wrap */
-        div.stButton > button p {
-            white-space: nowrap !important;
-            margin: 0 !important;
-            display: flex !important;
-            align-items: center !important;
-            gap: 8px !important;
-        }
-
-        div.stButton > button div[data-testid="stMarkdownContainer"] {
-            display: flex !important;
-            flex-direction: row !important;
-            align-items: center !important;
-            justify-content: center !important;
-        }
-
-        /* 5. RESPONSIVENESS ENGINE (Media Queries) */
-
-        /* Tablet & Mobile Tweaks */
-        @media (max-width: 1024px) {
-            .block-container {
-                padding-left: 2rem !important;
-                padding-right: 2rem !important;
-            }
-            [data-testid="stVerticalBlock"] > div:has(h2) {
-                padding: 1rem 20px !important;
-            }
-        }
-
-        /* Mobile Specific (< 768px) */
-        @media (max-width: 768px) {
-            /* 1. Nuke the huge sidebar spacing */
-            [data-testid="stSidebar"] {
-                width: 100% !important;
-            }
-
-            /* 2. Compact Sticky Header */
-            [data-testid="stVerticalBlock"] > div:has(h2) {
-                padding: 0.5rem 10px !important;
-                margin-bottom: 1rem !important;
-                flex-direction: column !important;
-                align-items: flex-start !important;
-                gap: 5px !important;
-            }
-
-            /* 3. Typography Scaling */
-            h2 {
-                font-size: 1rem !important;
-            }
-
-            /* 4. Column Stacking Fixes */
-            /* Ensure buttons don't have massive gaps when Streamlit stacks them */
-            [data-testid="column"] {
-                width: 100% !important;
-                flex: 1 1 100% !important;
-                min-width: 100% !important;
-                margin-bottom: 0.5rem !important;
-            }
-
-            /* Hide Spacers on Mobile to save vertical space */
-            [data-testid="column"]:has(div[style*="height: 0px"]) {
-                display: none !important;
-            }
-
-            /* Target columns that contain no visible Streamlit elements (spacers) */
-            [data-testid="column"]:empty {
-                display: none !important;
-            }
-
-            /* 5. Make buttons feel better on touch */
-            div.stButton > button {
-                width: 100% !important;
-                height: 48px !important; /* Larger touch target */
-                font-size: 1rem !important;
-            }
-        }
-
-        /* 6. SIDEBAR ALIGNMENT */
-        [data-testid="stSidebar"] {
-            background-color: #F8FAFC !important;
-            border-right: 1px solid #E2E8F0 !important;
-        }
-
-        footer {visibility: hidden !important;}
-    </style>
-    """
-    st.markdown(premium_css, unsafe_allow_html=True)
+def inject_theme() -> None:
+    """Inject the app-wide CSS. Call once per run, after login."""
+    st.markdown(_CSS, unsafe_allow_html=True)

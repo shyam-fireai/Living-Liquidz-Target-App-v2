@@ -1,11 +1,26 @@
+# Theme: FireAI palette (fireai.in) with Living Liquidz branding. Colours used in custom HTML/CSS
+# live in ui/branding.py - keep the two in sync.
 [theme]
-base="light"
-primaryColor="#2563EB"
-backgroundColor="#FFFFFF"
-secondaryBackgroundColor="#F9FAFB"
-textColor="#000000"
-font="sans serif"
+base = "light"
+primaryColor = "#1068E8"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F3F4F6"
+textColor = "#0A0A0A"
+linkColor = "#1068E8"
+borderColor = "#E5E5E5"
+font = "DM Sans:https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap"
+headingFont = "DM Sans:https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap"
+baseRadius = "0.625rem"
+showWidgetBorder = true
+showSidebarBorder = false
+dataframeHeaderBackgroundColor = "#F5F5F5"
+
+[theme.sidebar]
+backgroundColor = "#030716"
+secondaryBackgroundColor = "#0A1230"
+textColor = "#E7E9ED"
+borderColor = "#24304F"
+primaryColor = "#2B7EFF"
 
 [client]
-toolbarMode="minimal"
-
+toolbarMode = "minimal"

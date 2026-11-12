@@ -16,7 +16,7 @@ from ui.formatting import format_column, format_indian_number
 
 logger = logging.getLogger(__name__)
 
-STATUS_LABELS = {NEW: "\U0001f195 New", UPDATED: "✏️ Updated", UNCHANGED: "➖ Unchanged"}
+STATUS_LABELS = {NEW: "New", UPDATED: "Updated", UNCHANGED: "Unchanged"}
 
 
 def _fmt(cfg: TableConfig, col: str, value) -> str:
@@ -40,24 +40,29 @@ def _format_help(cfg: TableConfig) -> None:
     )
     # Always visible (not collapsible) so users see the rules every time they upload.
     st.info(
-        "**ℹ️ File format**\n\n"
+        "**File format**\n\n"
         f"- Columns: `{'`, `'.join(cfg.columns)}`\n"
         f"- {date_rule}\n"
         "- Text values are saved in UPPER CASE; blank numbers are saved as 0.\n"
         "- Numbers may contain ₹ and commas. Negative numbers are not allowed.\n"
-        "- Each key (" + " + ".join(format_column(c) for c in cfg.key_cols) + ") may appear only once."
+        "- Each key (" + " + ".join(format_column(c) for c in cfg.key_cols) + ") may appear only once.",
+        icon=":material/info:",
     )
     st.download_button(
-        "\U0001f4e5 Download Sample CSV",
+        "Download sample CSV",
         pd.DataFrame(columns=list(cfg.columns)).to_csv(index=False),
         file_name=f"{cfg.name}_sample.csv",
+        icon=":material/download:",
     )
 
 
 def _show_done(cfg: TableConfig, result: dict) -> None:
-    (st.success if result["ok"] else st.warning)(f"✅ **Upload finished.** {result['message']}")
+    if result["ok"]:
+        st.success(f"**Upload finished.** {result['message']}", icon=":material/check_circle:")
+    else:
+        st.warning(f"**Upload finished.** {result['message']}", icon=":material/warning:")
     st.caption(f"File: {result['file_name']} · {result['summary']}")
-    if st.button("\U0001f4e4 Upload another file", type="primary"):
+    if st.button("Upload another file", icon=":material/upload:", type="primary"):
         _reset_upload(cfg.name)
         st.rerun()
 
@@ -69,18 +74,20 @@ def _show_issues(check, cfg: TableConfig, file_name: str) -> bool:
         bad_rows = len({i.row for i in check.errors if i.row is not None})
         where = f" in {bad_rows} row(s)" if bad_rows else ""
         st.error(
-            f"❌ **{len(check.errors)} problem(s) found{where}. Nothing has been saved.** "
-            "Fix them in the file and upload it again."
+            f"**{len(check.errors)} problem(s) found{where}. Nothing has been saved.** "
+            "Fix them in the file and upload it again.",
+            icon=":material/error:",
         )
         st.dataframe(frame, width="stretch", hide_index=True)
         st.download_button(
-            "\U0001f4e5 Download problem list (CSV)",
+            "Download problem list (CSV)",
             frame.to_csv(index=False),
             file_name=f"problems_{file_name}",
+            icon=":material/download:",
         )
         return False
     if check.warnings:
-        st.warning(f"⚠️ **{len(check.warnings)} warning(s).** Please check before saving.")
+        st.warning(f"**{len(check.warnings)} warning(s).** Please check before saving.", icon=":material/warning:")
         st.dataframe(frame, width="stretch", hide_index=True)
     return True
 
@@ -94,7 +101,7 @@ def _show_changes(cfg: TableConfig, changes) -> None:
 
     updated = changes.rows[changes.rows["status"] == UPDATED]
     if not updated.empty:
-        with st.expander(f"✏️ What changes in the {len(updated)} updated row(s)", expanded=True):
+        with st.expander(f"What changes in the {len(updated)} updated row(s)", expanded=True):
             detail = [
                 {
                     "Row": r["_row"],
@@ -108,7 +115,7 @@ def _show_changes(cfg: TableConfig, changes) -> None:
             ]
             st.dataframe(pd.DataFrame(detail), width="stretch", hide_index=True)
 
-    with st.expander("\U0001f4c4 All rows in the file", expanded=False):
+    with st.expander("All rows in the file", expanded=False):
         view = changes.rows.copy()
         view.insert(0, "Status", view["status"].map(STATUS_LABELS))
         view[cfg.date_col] = view[cfg.date_col].dt.date
@@ -121,7 +128,7 @@ def _show_changes(cfg: TableConfig, changes) -> None:
 def _show_daily_preview(rows: pd.DataFrame) -> None:
     if rows.empty:
         return
-    with st.expander("\U0001f4c5 Daily split preview (Date & Branch Wise Target)", expanded=False):
+    with st.expander("Daily split preview (Date & Branch Wise Target)", expanded=False):
         labels = [f"{r.month:%b %Y} · {r.branch_name} · {r.series_group}" for r in rows.itertuples()]
         choice = st.selectbox("Row", range(len(labels)), format_func=lambda i: labels[i])
         daily = generate_daily_targets_from_monthly(rows.iloc[[choice]])
@@ -144,7 +151,7 @@ def _save(cfg: TableConfig, changes, file_name: str) -> None:
 
     if report.nothing_saved:
         log_audit_action("ERROR", target_table=cfg.name, error_message=report.message)
-        st.error(f"❌ {report.message}")
+        st.error(report.message, icon=":material/error:")
         return
 
     meta = {"file_name": file_name, "new": changes.count(NEW), "updated": changes.count(UPDATED)}
@@ -174,9 +181,9 @@ def _save(cfg: TableConfig, changes, file_name: str) -> None:
 
 def upload_screen(cfg: TableConfig) -> None:
     table = cfg.name
-    (col_back,) = render_header(title=f"Uploading: {cfg.display_name}", buttons=1)
+    (col_back,) = render_header(title=f"Upload: {cfg.display_name}", buttons=1, crumb="Sales targets")
     with col_back:
-        if st.button("⬅️ Back", width="stretch"):
+        if st.button("Back", icon=":material/arrow_back:", width="stretch"):
             st.session_state.page = "dashboard"
             st.rerun()
 
@@ -220,13 +227,13 @@ def upload_screen(cfg: TableConfig) -> None:
         _show_daily_preview(changes.to_save)
 
     if changes.to_save.empty:
-        st.info("ℹ️ Nothing to save: every row in the file already matches the database.")
+        st.info("Nothing to save: every row in the file already matches the database.", icon=":material/info:")
         return
 
     confirmed = True
     if check.warnings:
         confirmed = st.checkbox("I have checked the warnings above and want to save anyway")
     n = len(changes.to_save)
-    label = f"\U0001f680 Save {n} row(s)" + (" (unchanged rows are skipped)" if changes.count(UNCHANGED) else "")
-    if st.button(label, type="primary", disabled=not confirmed):
+    label = f"Save {n} row(s)" + (" (unchanged rows are skipped)" if changes.count(UNCHANGED) else "")
+    if st.button(label, icon=":material/save:", type="primary", disabled=not confirmed):
         _save(cfg, changes, uploaded.name)

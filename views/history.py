@@ -90,8 +90,8 @@ def _show_details(entry: pd.Series) -> None:
 
 
 def history_screen() -> None:
-    (col_back,) = render_header(title="\U0001f552 History", buttons=1)
-    if col_back.button("⬅️ Back", width="stretch"):
+    (col_back,) = render_header(title="History", buttons=1, crumb="Audit log")
+    if col_back.button("Back", icon=":material/arrow_back:", width="stretch"):
         st.session_state.page = "dashboard"
         st.rerun()
 
@@ -102,7 +102,10 @@ def history_screen() -> None:
         show_error("Could not load the history. Please try again in a moment.", e)
         return
     if log.empty:
-        st.info("\U0001f50e **No activity matches these filters.** Try a wider date range or fewer filters.")
+        st.info(
+            "**No activity matches these filters.** Try a wider date range or fewer filters.",
+            icon=":material/search_off:",
+        )
         return
 
     log["When (IST)"] = log["ts"].map(format_ist)

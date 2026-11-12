@@ -4,6 +4,7 @@ import streamlit as st
 
 from config import TableConfig
 from db.repository import get_all_filter_values
+from ui.components import sidebar_label
 from ui.formatting import format_column
 
 
@@ -65,12 +66,12 @@ def render_sidebar_filters(cfg: TableConfig, prefix: str) -> tuple[dict, bool]:
 
     options = get_all_filter_values(table, selections)
 
-    st.sidebar.subheader("\U0001f50d Filters")
+    sidebar_label("Filters")
     for col in cfg.filter_cols:
         key = _widget_key(prefix, table, col, version)
         if col == "date":
             prev = list(selections.get(col) or [])
-            st.sidebar.caption("\U0001f4c5 Select Date Range")
+            st.sidebar.caption("Date range")
             selections[col] = st.sidebar.date_input(
                 "Range", value=tuple(prev[:2]), key=key, label_visibility="collapsed"
             )
@@ -83,7 +84,9 @@ def render_sidebar_filters(cfg: TableConfig, prefix: str) -> tuple[dict, bool]:
                 default=[v for v in selections.get(col, []) if v in values],
             )
 
-    if st.sidebar.button("\U0001f504 Reset Filters", width="stretch", key=f"{prefix}_reset_filters"):
+    if st.sidebar.button(
+        "Reset filters", icon=":material/restart_alt:", width="stretch", key=f"{prefix}_reset_filters"
+    ):
         clear_filters(cfg, prefix)
         st.rerun()
 

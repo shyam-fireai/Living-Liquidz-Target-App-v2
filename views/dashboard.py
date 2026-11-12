@@ -32,51 +32,29 @@ def _go(page: str) -> None:
 
 def _header(cfg: TableConfig) -> None:
     if not cfg.editable:  # generated tables: no Edit / Upload
-        (col_history,) = render_header(title=cfg.display_name, buttons=1)
+        (col_history,) = render_header(title=cfg.display_name, buttons=1, crumb="Sales targets")
     else:
-        col_edit, col_upload, col_history = render_header(title=cfg.display_name, buttons=3)
-        if col_edit.button("📝 Edit", width="stretch"):
+        col_edit, col_upload, col_history = render_header(title=cfg.display_name, buttons=3, crumb="Sales targets")
+        if col_edit.button("Edit", icon=":material/edit:", width="stretch"):
             _go("edit")
-        if col_upload.button("📤 Upload", width="stretch"):
+        if col_upload.button("Upload", icon=":material/upload:", type="primary", width="stretch"):
             _go("upload")
-    if col_history.button("🕒 History", width="stretch"):
+    if col_history.button("History", icon=":material/history:", width="stretch"):
         _go("history")
 
 
-KPI_CSS = """
-<style>
-.kpi-row { display: flex; flex-wrap: wrap; gap: 12px; margin: 4px 0 12px; }
-.kpi-card {
-    flex: 1 1 130px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px;
-    padding: 14px 18px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
-}
-.kpi-value {
-    font-size: 1.75rem; font-weight: 700; color: #0f172a; line-height: 1.2;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.kpi-label {
-    font-size: 0.85rem; font-weight: 500; color: #64748b; margin-top: 4px;
-}
-@media (max-width: 640px) {
-    .kpi-card { padding: 10px 14px; }
-    .kpi-value { font-size: 1.35rem; }
-}
-</style>
-"""
-
-
 def _kpi_cards_html(cards: list[tuple[str, str, str | None]]) -> str:
-    """Big value on top, small label below. Hovering a card shows the exact total."""
+    """Small label on top, big value below (styled in ui/theme.py). Hovering a card shows the exact total."""
     items = []
     for label, value, exact in cards:
         tip = f' title="Exact total: {html.escape(exact)}"' if exact else ""
         items.append(
             f'<div class="kpi-card"{tip}>'
-            f'<div class="kpi-value">{html.escape(value)}</div>'
             f'<div class="kpi-label">{html.escape(label)}</div>'
+            f'<div class="kpi-value">{html.escape(value)}</div>'
             "</div>"
         )
-    return KPI_CSS + f'<div class="kpi-row">{"".join(items)}</div>'
+    return f'<div class="kpi-row">{"".join(items)}</div>'
 
 
 def _summary_cards(cfg: TableConfig, totals: dict) -> None:
@@ -110,7 +88,7 @@ def _filter_chips(cfg: TableConfig, filters: dict) -> None:
         return
     chips, clear = st.columns([6, 1], vertical_alignment="center")
     chips.markdown(" ".join(f":blue-badge[{label}]" for label in labels))
-    if clear.button("✕ Clear filters", width="stretch", key="dash_clear_filters"):
+    if clear.button("Clear filters", icon=":material/close:", width="stretch", key="dash_clear_filters"):
         clear_filters(cfg, "sb")
         st.rerun()
 
@@ -141,13 +119,26 @@ def _pager(cfg: TableConfig, page: int, pages: int) -> None:
         return
     _, prev, label, nxt = st.columns([4, 1.1, 1.4, 1.1], vertical_alignment="center")
     prev.button(
-        "◀ Previous", width="stretch", disabled=page <= 1, key="dash_prev", on_click=_set_page, args=(cfg, page - 1)
+        "Previous",
+        icon=":material/chevron_left:",
+        width="stretch",
+        disabled=page <= 1,
+        key="dash_prev",
+        on_click=_set_page,
+        args=(cfg, page - 1),
     )
     label.markdown(
         f"<div style='text-align:center'>Page <b>{page:,}</b> of <b>{pages:,}</b></div>", unsafe_allow_html=True
     )
     nxt.button(
-        "Next ▶", width="stretch", disabled=page >= pages, key="dash_next", on_click=_set_page, args=(cfg, page + 1)
+        "Next",
+        icon=":material/chevron_right:",
+        icon_position="right",
+        width="stretch",
+        disabled=page >= pages,
+        key="dash_next",
+        on_click=_set_page,
+        args=(cfg, page + 1),
     )
 
 
@@ -156,7 +147,7 @@ def _download_menu(cfg: TableConfig, filters: dict, total_rows: int) -> None:
     stamp = datetime.now().strftime("%Y%m%d_%H%M")
     base = f"{cfg.name}_{stamp}"
     count = min(total_rows, MAX_EXPORT_ROWS)
-    with st.popover("⬇️ Download", width="stretch"):
+    with st.popover("Download", icon=":material/download:", width="stretch"):
         st.caption(
             f"All **{count:,}** matching rows"
             + (f" (first {MAX_EXPORT_ROWS:,})" if total_rows > MAX_EXPORT_ROWS else "")
@@ -164,7 +155,8 @@ def _download_menu(cfg: TableConfig, filters: dict, total_rows: int) -> None:
         )
         # Files are built only when clicked (callable data).
         st.download_button(
-            "📄 CSV (.csv)",
+            "CSV (.csv)",
+            icon=":material/description:",
             data=lambda: to_csv_bytes(cfg, fetch_for_export(cfg.name, filters)),
             file_name=f"{base}.csv",
             mime="text/csv",
@@ -172,7 +164,8 @@ def _download_menu(cfg: TableConfig, filters: dict, total_rows: int) -> None:
             on_click="ignore",
         )
         st.download_button(
-            "📊 Excel (.xlsx)",
+            "Excel (.xlsx)",
+            icon=":material/table_view:",
             data=lambda: to_excel_bytes(cfg, fetch_for_export(cfg.name, filters)),
             file_name=f"{base}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -194,8 +187,9 @@ def dashboard_screen(cfg: TableConfig) -> None:
     _filter_chips(cfg, filters)
     if totals["rows"] == 0:
         st.info(
-            "\U0001f50e **No rows match these filters.** Try removing a filter"
-            + (" or use ✕ Clear filters above." if filters else ".")
+            "**No rows match these filters.** Try removing a filter"
+            + (" or use Clear filters above." if filters else "."),
+            icon=":material/search_off:",
         )
         return
 
