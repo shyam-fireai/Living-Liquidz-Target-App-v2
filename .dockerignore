@@ -2,6 +2,7 @@
 secrets.json
 .env
 *.env
+.streamlit/secrets.toml
 venv/
 .venv/
 .git/

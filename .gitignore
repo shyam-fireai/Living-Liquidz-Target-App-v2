@@ -7,3 +7,6 @@ secrets.json
 !.env.example
 .pytest_cache
 .ruff_cache
+
+# Streamlit secrets (Streamlit Cloud: paste into Settings -> Secrets instead)
+.streamlit/secrets.toml

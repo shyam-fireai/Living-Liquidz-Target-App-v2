@@ -97,9 +97,28 @@ def get_table(name: str) -> TableConfig:
 
 # -------------------------------
 # SETTINGS
-# Every setting can come from an environment variable (preferred on servers) or from
-# secrets.json (convenient locally). Environment variables win. See README "Configuration".
+# Every setting is looked up in this order (first non-empty value wins):
+#   1. st.secrets      - Streamlit Community Cloud "Secrets" box, or .streamlit/secrets.toml
+#   2. environment     - Docker / servers
+#   3. secrets.json    - local development
+# See README "Configuration".
 # -------------------------------
+def _streamlit_secrets() -> dict:
+    """Plain dict of st.secrets, or {} when no secrets.toml exists (the normal local case)."""
+    try:
+        import streamlit as st
+
+        if st.secrets.load_if_toml_exists():
+            return st.secrets.to_dict()
+    except Exception as e:  # malformed TOML: report the type only, never the contents
+        logger.error("Could not read Streamlit secrets (%s); falling back to env / secrets.json", type(e).__name__)
+    return {}
+
+
+def _present(value) -> bool:
+    return value is not None and value != "" and value != []
+
+
 @lru_cache(maxsize=1)
 def load_secrets() -> dict:
     """Load secrets.json once. Missing file -> empty dict (env vars may supply everything)."""
@@ -112,8 +131,11 @@ def load_secrets() -> dict:
 
 
 def get_secret(key: str, default=None):
-    """Environment variable wins over secrets.json."""
-    return os.getenv(key) or load_secrets().get(key, default)
+    """st.secrets, then environment variable, then secrets.json."""
+    for value in (_streamlit_secrets().get(key), os.getenv(key), load_secrets().get(key)):
+        if _present(value):
+            return value
+    return default
 
 
 # env var -> key inside secrets.json "data_clickhouse"
@@ -132,10 +154,21 @@ def _as_bool(value) -> bool:
 
 
 def get_db_settings() -> dict:
-    conf = dict(load_secrets().get("data_clickhouse") or {})
+    """Each field: st.secrets (CLICKHOUSE_HOST or [data_clickhouse] host), then env, then secrets.json."""
+    st_secrets = _streamlit_secrets()
+    sources = [
+        st_secrets,
+        st_secrets.get("data_clickhouse") or {},
+        os.environ,
+        load_secrets().get("data_clickhouse") or {},
+    ]
+    conf = {}
     for env, key in _DB_ENV.items():
-        if os.getenv(env) is not None:
-            conf[key] = os.getenv(env)
+        for i, source in enumerate(sources):
+            value = source.get(key if i in (1, 3) else env)
+            if value is not None and value != "":
+                conf[key] = value
+                break
     conf.setdefault("port", 8123)
     conf["port"] = int(conf["port"])
     conf["secure"] = _as_bool(conf.get("secure", False))
@@ -144,10 +177,13 @@ def get_db_settings() -> dict:
 
 
 def get_allowed_emails() -> list[str]:
+    """Accepts "a@x.com, b@x.com" (env / secrets.json) or a TOML list ["a@x.com", "b@x.com"]."""
     raw = get_secret("ALLOWED_EMAILS", [])
-    if isinstance(raw, str):
-        raw = raw.split(",")
-    return [e.strip().lower() for e in raw if e and e.strip()]
+    items = raw.split(",") if isinstance(raw, str) else raw
+    emails = []
+    for item in items:  # a list entry may itself be "a@x.com, b@x.com"
+        emails += [e.strip().lower() for e in str(item).split(",") if e.strip()]
+    return emails
 
 
 def session_seconds() -> int:

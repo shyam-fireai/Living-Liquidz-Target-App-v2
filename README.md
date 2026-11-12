@@ -53,9 +53,16 @@ settings to fix (values are never displayed), and the same list is logged at `ER
 
 ## Configuration
 
-Every setting can be provided as an **environment variable** (recommended on servers) or in a
-`secrets.json` file in the project directory (convenient locally; template: `secrets.example.json`).
-Environment variables take precedence. `LL_SECRETS_PATH` can point to a `secrets.json` elsewhere.
+Every setting can come from three places; the first one that has a value wins:
+
+1. **Streamlit secrets** (`st.secrets`): the Secrets box on Streamlit Community Cloud, or a local
+   `.streamlit/secrets.toml` (template: `.streamlit/secrets.toml.example`). Same names as the
+   environment variables below; the database settings may also go in a `[data_clickhouse]` table.
+2. **Environment variables** (Docker / servers; template: `.env.example`).
+3. **`secrets.json`** in the project directory (local development; template: `secrets.example.json`).
+   `LL_SECRETS_PATH` can point to a `secrets.json` elsewhere.
+
+`ALLOWED_EMAILS` may be a comma-separated string or, in TOML, a list of strings.
 
 | Environment variable | secrets.json key | Required | Description |
 |---|---|---|---|
@@ -72,6 +79,24 @@ Environment variables take precedence. `LL_SECRETS_PATH` can point to a `secrets
 | `SESSION_HOURS` | `SESSION_HOURS` | no (1) | How long a login lasts |
 
 `auth_clickhouse` in older `secrets.json` files is not used by the app.
+
+---
+
+## Deploying to Streamlit Community Cloud
+
+1. On [share.streamlit.io](https://share.streamlit.io) create an app from this repository:
+   branch `development` (or `main`), main file `app.py`. Under **Advanced settings** choose
+   **Python 3.11**. Dependencies are installed from `requirements.txt`.
+2. In **Settings → Secrets**, paste the contents of `.streamlit/secrets.toml.example` and replace
+   every placeholder. Use a newly generated `COOKIE_SECRET` for this deployment.
+3. Save. The app restarts. If anything is still missing it shows which setting to fix (values are
+   never displayed).
+
+Notes:
+- The ClickHouse server must accept connections from the internet (Streamlit Cloud has no fixed
+  IP), over TLS: `CLICKHOUSE_SECURE = true`, usually port 8443.
+- The tables must already exist (see [Database](#database)).
+- Never commit `.streamlit/secrets.toml`, `secrets.json` or `.env`; they are gitignored.
 
 ---
 
