@@ -13,4 +13,3 @@ __pycache__/
 .ruff_cache/
 Data/
 tests/
-scripts/

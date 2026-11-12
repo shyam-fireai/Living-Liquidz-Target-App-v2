@@ -159,7 +159,6 @@ services/
   export.py         CSV / Excel export
 ui/                 theme CSS, header, sidebar filters, number formatting
 views/              dashboard.py, edit.py, upload.py, history.py (screens)
-scripts/            one-off offline tools (not part of the running app)
 tests/              pytest unit tests
 ```
 
