@@ -16,6 +16,19 @@ _CSS = f"""
     }}
     header[data-testid="stHeader"] {{
         background-color: rgba(255, 255, 255, 0) !important;
+        /* The transparent top bar lies over our sticky header; with the sidebar collapsed it covered
+           the Edit / Upload buttons and swallowed their clicks. Let clicks through, except on its
+           own controls (expand-sidebar arrow, main menu). */
+        pointer-events: none;
+    }}
+    header[data-testid="stHeader"] * {{
+        pointer-events: none !important;  /* its inner boxes (stToolbar...) turn clicks back on */
+    }}
+    header[data-testid="stHeader"] button,
+    header[data-testid="stHeader"] button *,
+    header[data-testid="stHeader"] a,
+    header[data-testid="stHeader"] [role="button"] {{
+        pointer-events: auto !important;
     }}
     [data-testid="stDecoration"] {{
         display: none !important;

@@ -11,7 +11,7 @@ from db.repository import fetch_data, fetch_existing
 from services.edits import cell_changes, changed_rows_mask, check_edits
 from services.targets import save_targets
 from services.validation import clean_dataframe_for_db
-from ui.components import render_header, show_error
+from ui.components import go_to, render_header, show_error
 from ui.filters import render_sidebar_filters
 from ui.formatting import (
     DIFF_NEW_STYLE,
@@ -101,10 +101,7 @@ def edit_screen(cfg: TableConfig) -> None:
         _reset_edit_state(table)
 
     (col_back,) = render_header(title=f"Edit: {cfg.display_name}", buttons=1, crumb="Sales targets")
-    with col_back:
-        if st.button("Back", icon=":material/arrow_back:", width="stretch"):
-            st.session_state.page = "dashboard"
-            st.rerun()
+    col_back.button("Back", icon=":material/arrow_back:", width="stretch", on_click=go_to, args=("dashboard",))
     _show_flash()
 
     filters, changed = render_sidebar_filters(cfg, prefix="ed")

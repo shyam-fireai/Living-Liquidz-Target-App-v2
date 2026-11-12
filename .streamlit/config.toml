@@ -24,3 +24,10 @@ primaryColor = "#2B7EFF"
 
 [client]
 toolbarMode = "minimal"
+
+[server]
+# Don't watch source files for changes. Watching made the first visit to a screen (e.g. Edit)
+# take 1-4 s while Streamlit scanned every loaded module, and a server should not reload on
+# file changes anyway. During development, restart the app after editing code (or run with
+# `streamlit run app.py --server.fileWatcherType auto` to get auto-reload back).
+fileWatcherType = "none"

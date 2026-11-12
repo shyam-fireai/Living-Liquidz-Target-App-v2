@@ -30,6 +30,15 @@ def render_header(title="Dashboard", buttons=2, crumb=""):
     return slots
 
 
+def go_to(page: str) -> None:
+    """on_click callback for navigation buttons ("dashboard", "edit", "upload", "history").
+
+    As a callback it runs before the script, so a click costs one run instead of two
+    (setting the page and calling st.rerun() would first re-run the old screen).
+    """
+    st.session_state.page = page
+
+
 def show_error(message: str, exc: BaseException | None = None) -> None:
     """Friendly error for users; technical details only in a collapsed expander (and in the logs)."""
     st.error(message, icon=":material/error:")

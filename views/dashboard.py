@@ -10,7 +10,7 @@ import streamlit as st
 from config import SYSTEM_COLUMNS, TableConfig
 from db.repository import MAX_EXPORT_ROWS, fetch_data, fetch_for_export, summarize
 from services.export import to_csv_bytes, to_excel_bytes
-from ui.components import render_header, show_error
+from ui.components import go_to, render_header, show_error
 from ui.filters import clear_filters, describe_filters, render_sidebar_filters
 from ui.formatting import (
     apply_currency_format,
@@ -25,22 +25,16 @@ logger = logging.getLogger(__name__)
 ROW_CHOICES = {"200": 200, "500": 500, "1,000": 1_000, "5,000": 5_000, "All": MAX_EXPORT_ROWS}
 
 
-def _go(page: str) -> None:
-    st.session_state.page = page
-    st.rerun()
-
-
 def _header(cfg: TableConfig) -> None:
     if not cfg.editable:  # generated tables: no Edit / Upload
         (col_history,) = render_header(title=cfg.display_name, buttons=1, crumb="Sales targets")
     else:
         col_edit, col_upload, col_history = render_header(title=cfg.display_name, buttons=3, crumb="Sales targets")
-        if col_edit.button("Edit", icon=":material/edit:", width="stretch"):
-            _go("edit")
-        if col_upload.button("Upload", icon=":material/upload:", type="primary", width="stretch"):
-            _go("upload")
-    if col_history.button("History", icon=":material/history:", width="stretch"):
-        _go("history")
+        col_edit.button("Edit", icon=":material/edit:", width="stretch", on_click=go_to, args=("edit",))
+        col_upload.button(
+            "Upload", icon=":material/upload:", type="primary", width="stretch", on_click=go_to, args=("upload",)
+        )
+    col_history.button("History", icon=":material/history:", width="stretch", on_click=go_to, args=("history",))
 
 
 def _kpi_cards_html(cards: list[tuple[str, str, str | None]]) -> str:

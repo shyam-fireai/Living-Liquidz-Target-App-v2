@@ -11,7 +11,7 @@ from db.repository import fetch_existing, known_values
 from services.changes import NEW, UNCHANGED, UPDATED, classify_changes
 from services.targets import generate_daily_targets_from_monthly, save_targets
 from services.validation import robust_read_csv, validate_upload
-from ui.components import render_header, show_error
+from ui.components import go_to, render_header, show_error
 from ui.formatting import format_column, format_indian_number
 
 logger = logging.getLogger(__name__)
@@ -182,10 +182,7 @@ def _save(cfg: TableConfig, changes, file_name: str) -> None:
 def upload_screen(cfg: TableConfig) -> None:
     table = cfg.name
     (col_back,) = render_header(title=f"Upload: {cfg.display_name}", buttons=1, crumb="Sales targets")
-    with col_back:
-        if st.button("Back", icon=":material/arrow_back:", width="stretch"):
-            st.session_state.page = "dashboard"
-            st.rerun()
+    col_back.button("Back", icon=":material/arrow_back:", width="stretch", on_click=go_to, args=("dashboard",))
 
     st.divider()
     result = st.session_state.get(_state_key(table, "result"))

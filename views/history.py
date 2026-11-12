@@ -17,7 +17,7 @@ from services.history import (
     state_diff,
     table_label,
 )
-from ui.components import render_header, show_error
+from ui.components import go_to, render_header, show_error
 from ui.formatting import DIFF_NEW_STYLE, DIFF_OLD_STYLE, format_column, format_indian_number
 
 logger = logging.getLogger(__name__)
@@ -91,9 +91,7 @@ def _show_details(entry: pd.Series) -> None:
 
 def history_screen() -> None:
     (col_back,) = render_header(title="History", buttons=1, crumb="Audit log")
-    if col_back.button("Back", icon=":material/arrow_back:", width="stretch"):
-        st.session_state.page = "dashboard"
-        st.rerun()
+    col_back.button("Back", icon=":material/arrow_back:", width="stretch", on_click=go_to, args=("dashboard",))
 
     (start_ts, end_ts), actions, users, tables = _filters()
     try:
