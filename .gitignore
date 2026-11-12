@@ -2,3 +2,11 @@ Data
 venv
 __pycache__
 secrets.json
+.env
+*.env
+!.env.example
+.pytest_cache
+.ruff_cache
+
+# Streamlit secrets (Streamlit Cloud: paste into Settings -> Secrets instead)
+.streamlit/secrets.toml

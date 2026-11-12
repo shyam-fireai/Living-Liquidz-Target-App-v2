@@ -1,0 +1,15 @@
+# Never bake secrets or local environments into the image
+secrets.json
+.env
+*.env
+.streamlit/secrets.toml
+venv/
+.venv/
+.git/
+.github/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+Data/
+tests/
