@@ -137,8 +137,6 @@ _LOGIN_CSS = f"""
 
 
 def show_login_page():
-    cookie_manager = get_cookie_manager()
-
     st.markdown(_LOGIN_CSS, unsafe_allow_html=True)
 
     logo = logo_html(LIVING_LIQUIDZ_LOGO, "Living Liquidz", 88, "border-radius:14px;display:block;margin:0 auto 20px")
@@ -184,16 +182,15 @@ def show_login_page():
                 if "logout_audited" in st.session_state:
                     del st.session_state.logout_audited
 
-                # 5. Set cookies (lifetime = SESSION_HOURS, default 1 hour)
-                # This ensures the session handles Ctrl+R but stays secure
-                expiry = datetime.datetime.fromtimestamp(expires_at)
-
-                cookie_manager.set("auth_token", token, key="set_at", expires_at=expiry)
-                cookie_manager.set("auth_user", username_or_email, key="set_au", expires_at=expiry)
-                cookie_manager.set("auth_profile", json.dumps(profile), key="set_ap", expires_at=expiry)
-
-                # Set the Sentinel Switch
-                cookie_manager.set("auth_session_active", "1", key="set_asa", expires_at=expiry)
+                # 5. Queue the cookies (lifetime = SESSION_HOURS, default 1 hour) so Ctrl+R keeps
+                # the session. They are written by _write_pending_cookies on the next runs.
+                # auth_session_active (the sentinel) goes last.
+                st.session_state.pending_cookies = {
+                    "auth_token": token,
+                    "auth_user": username_or_email,
+                    "auth_profile": json.dumps(profile),
+                    "auth_session_active": "1",
+                }
 
                 logger.info("User %s logged in", username_or_email)
                 st.rerun()
@@ -205,6 +202,30 @@ def show_login_page():
     st.markdown(f'<div class="ll-login-powered">Powered by {fireai}</div>', unsafe_allow_html=True)
 
     st.stop()
+
+
+def _write_pending_cookies(cookie_manager) -> None:
+    """Write the login cookies, keeping their components on the page until the browser confirms.
+
+    Each cookie is written by a hidden component (an iframe) that needs a moment to load. If the
+    script reruns before that and the component is not rendered again, Streamlit removes it and
+    the cookie is never written, so Ctrl+R lands on the login page. Rendering the components on
+    every run with the same key and arguments keeps them alive; each returns True once it has run.
+    """
+    pending = st.session_state.get("pending_cookies")
+    if not pending:
+        return
+    expiry = datetime.datetime.fromtimestamp(st.session_state.session_expires_at)
+    options = {"path": "/", "expires": expiry.isoformat(), "sameSite": "strict"}  # same as CookieManager.set
+    done = [
+        # cookie_manager.cookie_manager is the component itself; unlike .set() it returns the result.
+        cookie_manager.cookie_manager(
+            method="set", cookie=name, value=value, options=options, key=f"set_{name}", default=False
+        )
+        for name, value in pending.items()
+    ]
+    if all(done):
+        del st.session_state.pending_cookies
 
 
 def require_login():
@@ -250,6 +271,7 @@ def require_login():
 
     # 2. PRIORITY 2: Check current session state (Fast path: already initialized)
     if st.session_state.get("authenticated", False):
+        _write_pending_cookies(cookie_manager)
         return True
 
     # 3. PRIORITY 3: Hybrid Cookie Check (Fast Header + Patient Component)
@@ -324,6 +346,7 @@ def logout(cookie_manager=None):
         expiry = datetime.datetime.now() + datetime.timedelta(seconds=30)
         cookie_manager.set("auth_logout_in_progress", "1", key="set_hard_sentinel", expires_at=expiry)
 
-    # 2. Stage the server-side trigger
+    # 2. Stage the server-side trigger (and drop login cookies not yet written)
+    st.session_state.pop("pending_cookies", None)
     st.session_state.logout_triggered = True
     st.rerun()

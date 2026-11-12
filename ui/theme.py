@@ -167,6 +167,9 @@ _CSS = f"""
     }}
 
     footer {{ visibility: hidden !important; }}
+
+    /* The cookie components (auth.py) are invisible iframes; don't let them take up space. */
+    [data-testid="stElementContainer"]:has(iframe[title*="CookieManager"]) {{ display: none; }}
 </style>
 """
 

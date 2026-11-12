@@ -55,12 +55,19 @@ else:
     sidebar_label("Tables")
     # Generated tables (e.g. Date & Branch Wise Target) cannot be edited/uploaded directly.
     table_keys = [t for t, cfg in TABLES.items() if page == "dashboard" or cfg.editable]
-    labels = [TABLES[t].display_name for t in table_keys]
     current = st.session_state.current_table
-    index = table_keys.index(current) if current in table_keys else 0
-
-    selected_label = st.sidebar.radio("Select Table", labels, index=index, label_visibility="collapsed")
-    cfg = TABLES[table_keys[labels.index(selected_label)]]
+    # A fixed key keeps the radio the same widget across reruns. (Passing index= made Streamlit
+    # rebuild it whenever the selection changed, so every other click was lost.)
+    if st.session_state.get("table_picker") not in table_keys:  # first run, or back from History
+        st.session_state.table_picker = current if current in table_keys else table_keys[0]
+    selected = st.sidebar.radio(
+        "Select Table",
+        table_keys,
+        format_func=lambda t: TABLES[t].display_name,
+        key="table_picker",
+        label_visibility="collapsed",
+    )
+    cfg = TABLES[selected]
 
     if current != cfg.name:
         logger.info("Table switched: %s -> %s", current, cfg.name)
